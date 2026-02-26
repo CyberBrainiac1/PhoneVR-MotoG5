@@ -8,20 +8,20 @@ on:
   push:
     branches: ["main", "copilot/**"]
     paths:
-      - 'android-app/**'
-      - '.github/workflows/build-android.yml'
+      - "android-app/**"
+      - ".github/workflows/build-android.yml"
   pull_request:
     paths:
-      - 'android-app/**'
-      - '.github/workflows/build-android.yml'
-  workflow_dispatch: {}    # manual "Run workflow" button in the Actions UI
+      - "android-app/**"
+      - ".github/workflows/build-android.yml"
+  workflow_dispatch: {} # manual "Run workflow" button in the Actions UI
 
 jobs:
   build:
     name: Build PhoneVR-MotoG5.apk
     runs-on: ubuntu-latest
     permissions:
-      contents: write    # needed to upload release assets
+      contents: write # needed to upload release assets
 
     steps:
       - name: Checkout repository
@@ -30,9 +30,9 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'gradle'
+          java-version: "17"
+          distribution: "temurin"
+          cache: "gradle"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -42,7 +42,9 @@ jobs:
 
       - name: Make gradlew executable
         working-directory: android-app
-        run: chmod +x gradlew
+        run: |
+          sed -i 's/\r$//' gradlew
+          chmod +x gradlew
 
       - name: Build APK
         working-directory: android-app
