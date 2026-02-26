@@ -32,3 +32,8 @@ pc-driver/pc-driver
 Release/
 Debug/
 x64/
+
+# .NET installer build artifacts
+installer-gui/bin/
+installer-gui/obj/
+installer-gui/out/

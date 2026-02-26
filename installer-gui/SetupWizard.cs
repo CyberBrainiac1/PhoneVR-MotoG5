@@ -1,0 +1,672 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// PhoneVR-MotoG5 — installer-gui/SetupWizard.cs
+//
+// A four-step WinForms wizard that guides anyone — regardless of technical
+// skill — through installing the PhoneVR-MotoG5 SteamVR driver.
+//
+// Step 1 — Welcome         : intro, requirements checklist
+// Step 2 — Ready to Install: shows detected SteamVR path + source dir
+// Step 3 — Installing      : animated progress + live install log
+// Step 4 — Done            : success / failure with next steps
+
+using System;
+using System.Drawing;
+using System.IO;
+using System.Threading;
+using System.Windows.Forms;
+
+namespace PhoneVRInstaller
+{
+    internal sealed class SetupWizard : Form
+    {
+        // ── Colours / fonts (modern look) ─────────────────────────────────────
+        private static readonly Color AccentBlue   = Color.FromArgb(0, 103, 192);
+        private static readonly Color LightBg      = Color.FromArgb(245, 247, 250);
+        private static readonly Color WhiteBg      = Color.White;
+        private static readonly Color BorderGray   = Color.FromArgb(210, 215, 220);
+        private static readonly Color TextDark     = Color.FromArgb(30, 30, 40);
+        private static readonly Color TextMid      = Color.FromArgb(90, 95, 110);
+        private static readonly Color GreenOk      = Color.FromArgb(24, 140, 76);
+        private static readonly Color RedFail      = Color.FromArgb(196, 48, 48);
+
+        private static readonly Font FontTitle    = new Font("Segoe UI", 14f, FontStyle.Bold,   GraphicsUnit.Point);
+        private static readonly Font FontSubtitle = new Font("Segoe UI",  9f, FontStyle.Regular, GraphicsUnit.Point);
+        private static readonly Font FontBody     = new Font("Segoe UI",  9f, FontStyle.Regular, GraphicsUnit.Point);
+        private static readonly Font FontBold9    = new Font("Segoe UI",  9f, FontStyle.Bold,   GraphicsUnit.Point);
+        private static readonly Font FontMono     = new Font("Consolas",  8.5f, FontStyle.Regular, GraphicsUnit.Point);
+
+        // ── Shared chrome ──────────────────────────────────────────────────────
+        private Panel      _header;
+        private Label      _lblTitle;
+        private Label      _lblSubtitle;
+        private Panel      _content;
+        private Panel      _footer;
+        private Button     _btnBack;
+        private Button     _btnNext;
+        private Button     _btnCancel;
+        private Label      _lblStep;     // "Step 1 of 4"
+
+        // ── Pages ──────────────────────────────────────────────────────────────
+        private Panel      _pageWelcome;
+        private Panel      _pageReady;
+        private Panel      _pageInstall;
+        private Panel      _pageDone;
+        private Panel[]    _pages;
+        private int        _currentPage;
+
+        // ── Ready-page controls ───────────────────────────────────────────────
+        private TextBox    _txtSteamVRPath;
+        private TextBox    _txtSourcePath;
+        private Label      _lblDetectStatus;
+
+        // ── Install-page controls ─────────────────────────────────────────────
+        private ProgressBar  _progress;
+        private RichTextBox  _rtbLog;
+
+        // ── Done-page controls ────────────────────────────────────────────────
+        private Label      _lblDoneIcon;
+        private Label      _lblDoneHeading;
+        private Label      _lblDoneBody;
+
+        // ── State ──────────────────────────────────────────────────────────────
+        private bool _installSuccess;
+
+        public SetupWizard()
+        {
+            BuildUI();
+            _currentPage = 0;
+            ShowPage(0);
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        // UI construction
+        // ══════════════════════════════════════════════════════════════════════
+
+        private void BuildUI()
+        {
+            SuspendLayout();
+
+            // ── Form ──────────────────────────────────────────────────────────
+            Text            = "PhoneVR-MotoG5 Setup";
+            ClientSize      = new Size(580, 480);
+            MinimumSize     = new Size(580, 480);
+            MaximumSize     = new Size(580, 480);
+            FormBorderStyle = FormBorderStyle.FixedSingle;
+            MaximizeBox     = false;
+            StartPosition   = FormStartPosition.CenterScreen;
+            BackColor       = LightBg;
+            Font            = FontBody;
+
+            // ── Header (white, accent left border) ────────────────────────────
+            _header = new Panel
+            {
+                Dock      = DockStyle.Top,
+                Height    = 80,
+                BackColor = WhiteBg,
+            };
+            // Left accent bar
+            var accentBar = new Panel
+            {
+                Location  = new Point(0, 0),
+                Size      = new Size(6, 80),
+                BackColor = AccentBlue,
+            };
+            _lblTitle = new Label
+            {
+                Location  = new Point(24, 14),
+                Size      = new Size(530, 30),
+                Font      = FontTitle,
+                ForeColor = TextDark,
+                AutoSize  = false,
+            };
+            _lblSubtitle = new Label
+            {
+                Location  = new Point(26, 46),
+                Size      = new Size(530, 22),
+                Font      = FontSubtitle,
+                ForeColor = TextMid,
+                AutoSize  = false,
+            };
+            _header.Controls.Add(accentBar);
+            _header.Controls.Add(_lblTitle);
+            _header.Controls.Add(_lblSubtitle);
+
+            var headerBorder = new Panel
+            {
+                Dock      = DockStyle.Top,
+                Height    = 1,
+                BackColor = BorderGray,
+            };
+
+            // ── Content ────────────────────────────────────────────────────────
+            _content = new Panel
+            {
+                Dock      = DockStyle.Fill,
+                Padding   = new Padding(28, 20, 28, 0),
+                BackColor = LightBg,
+            };
+
+            // ── Footer ─────────────────────────────────────────────────────────
+            var footerBorder = new Panel
+            {
+                Dock      = DockStyle.Bottom,
+                Height    = 1,
+                BackColor = BorderGray,
+            };
+            _footer = new Panel
+            {
+                Dock      = DockStyle.Bottom,
+                Height    = 52,
+                BackColor = WhiteBg,
+                Padding   = new Padding(0, 10, 16, 10),
+            };
+
+            _lblStep = new Label
+            {
+                Location  = new Point(20, 16),
+                AutoSize  = true,
+                Font      = FontSubtitle,
+                ForeColor = TextMid,
+            };
+
+            _btnCancel = MakeButton("Cancel",  80, false);
+            _btnNext   = MakeButton("Next  →", 96, true);
+            _btnBack   = MakeButton("← Back",  80, false);
+
+            // Right-align buttons
+            _btnCancel.Location = new Point(580 - 16 - 80,             10);
+            _btnNext.Location   = new Point(580 - 16 - 80 - 4 - 96,   10);
+            _btnBack.Location   = new Point(580 - 16 - 80 - 4 - 96 - 4 - 80, 10);
+
+            _btnCancel.Click += (s, e) => BtnCancel_Click();
+            _btnNext.Click   += (s, e) => BtnNext_Click();
+            _btnBack.Click   += (s, e) => BtnBack_Click();
+
+            _footer.Controls.Add(_lblStep);
+            _footer.Controls.Add(_btnCancel);
+            _footer.Controls.Add(_btnNext);
+            _footer.Controls.Add(_btnBack);
+
+            // ── Page: Welcome ──────────────────────────────────────────────────
+            _pageWelcome = new Panel { Dock = DockStyle.Fill, BackColor = LightBg };
+
+            var welcomeBox = new Panel
+            {
+                BackColor    = WhiteBg,
+                Dock         = DockStyle.Fill,
+                Padding      = new Padding(20),
+                BorderStyle  = BorderStyle.None,
+            };
+
+            // Intro text
+            var lblIntro = MakeBodyLabel(
+                "This wizard will install the PhoneVR-MotoG5 SteamVR driver on your PC in about 30 seconds.\n\n" +
+                "You don't need any technical experience — just click Next and the wizard does everything for you.",
+                new Rectangle(0, 0, 510, 56));
+
+            // Checklist heading
+            var lblCheckHeading = new Label
+            {
+                Text      = "Before you start, make sure you have:",
+                Location  = new Point(0, 70),
+                Size      = new Size(510, 20),
+                Font      = FontBold9,
+                ForeColor = TextDark,
+            };
+
+            // Checklist items
+            string[] checks = {
+                "✔  SteamVR installed and run at least once",
+                "✔  Your PC and phone are on the same Wi-Fi network (5 GHz recommended)",
+                "✔  The PhoneVR-MotoG5 APK installed on your Android phone",
+                "✔  This installer is in the same folder as the driver files (from the release zip)",
+            };
+            var checkPanel = new Panel { Location = new Point(0, 98), Size = new Size(510, 100) };
+            for (int i = 0; i < checks.Length; i++)
+            {
+                var lbl = new Label
+                {
+                    Text      = checks[i],
+                    Location  = new Point(8, i * 24),
+                    Size      = new Size(502, 22),
+                    Font      = FontBody,
+                    ForeColor = TextDark,
+                };
+                checkPanel.Controls.Add(lbl);
+            }
+
+            // "What will happen" note
+            var lblWillDo = MakeBodyLabel(
+                "The installer will automatically:\n" +
+                "  • Copy the driver to your SteamVR drivers folder\n" +
+                "  • Enable multi-driver support in SteamVR settings\n" +
+                "  • Add Windows Firewall rules for network communication",
+                new Rectangle(0, 206, 510, 76));
+            lblWillDo.ForeColor = TextMid;
+
+            welcomeBox.Controls.Add(lblIntro);
+            welcomeBox.Controls.Add(lblCheckHeading);
+            welcomeBox.Controls.Add(checkPanel);
+            welcomeBox.Controls.Add(lblWillDo);
+            _pageWelcome.Controls.Add(welcomeBox);
+
+            // ── Page: Ready ────────────────────────────────────────────────────
+            _pageReady = new Panel { Dock = DockStyle.Fill, BackColor = LightBg };
+
+            var readyBox = new Panel { BackColor = WhiteBg, Dock = DockStyle.Fill, Padding = new Padding(20) };
+
+            var lblSteamVRLbl = new Label { Text = "SteamVR installation path:", Location = new Point(0, 4), AutoSize = true, Font = FontBold9, ForeColor = TextDark };
+            _txtSteamVRPath = new TextBox { Location = new Point(0, 26), Width = 430, BackColor = Color.FromArgb(250, 252, 255) };
+            StyleTextBox(_txtSteamVRPath);
+            var btnBrowseSteam = MakeButton("Browse…", 80, false);
+            btnBrowseSteam.Location = new Point(438, 25);
+            btnBrowseSteam.Click += (s, e) => BrowseFolder(_txtSteamVRPath, "Select SteamVR folder");
+
+            var lblSourceLbl = new Label { Text = "Driver files folder (where you extracted the zip):", Location = new Point(0, 62), AutoSize = true, Font = FontBold9, ForeColor = TextDark };
+            _txtSourcePath = new TextBox { Location = new Point(0, 84), Width = 430 };
+            StyleTextBox(_txtSourcePath);
+            var btnBrowseSrc = MakeButton("Browse…", 80, false);
+            btnBrowseSrc.Location = new Point(438, 83);
+            btnBrowseSrc.Click += (s, e) => BrowseFolder(_txtSourcePath, "Select driver files folder");
+
+            _lblDetectStatus = new Label
+            {
+                Location  = new Point(0, 122),
+                Size      = new Size(518, 40),
+                Font      = FontBody,
+                ForeColor = GreenOk,
+                AutoSize  = false,
+            };
+
+            var tipBox = new Panel
+            {
+                Location  = new Point(0, 172),
+                Size      = new Size(518, 66),
+                BackColor = Color.FromArgb(235, 245, 255),
+                Padding   = new Padding(12, 8, 12, 8),
+            };
+            var tipLabel = new Label
+            {
+                Dock      = DockStyle.Fill,
+                Text      = "💡  Tip: If SteamVR was not detected automatically, open Steam, go to\n" +
+                            "    Library → SteamVR, install it, run it once, then click ← Back and retry.",
+                Font      = FontBody,
+                ForeColor = Color.FromArgb(30, 80, 150),
+                AutoSize  = false,
+            };
+            tipBox.Controls.Add(tipLabel);
+
+            readyBox.Controls.Add(lblSteamVRLbl);
+            readyBox.Controls.Add(_txtSteamVRPath);
+            readyBox.Controls.Add(btnBrowseSteam);
+            readyBox.Controls.Add(lblSourceLbl);
+            readyBox.Controls.Add(_txtSourcePath);
+            readyBox.Controls.Add(btnBrowseSrc);
+            readyBox.Controls.Add(_lblDetectStatus);
+            readyBox.Controls.Add(tipBox);
+            _pageReady.Controls.Add(readyBox);
+
+            // ── Page: Install ──────────────────────────────────────────────────
+            _pageInstall = new Panel { Dock = DockStyle.Fill, BackColor = LightBg };
+
+            var installBox = new Panel { BackColor = WhiteBg, Dock = DockStyle.Fill, Padding = new Padding(20) };
+
+            var lblInstalling = new Label
+            {
+                Text      = "Please wait — this takes less than 10 seconds…",
+                Location  = new Point(0, 0),
+                Size      = new Size(518, 20),
+                Font      = FontBold9,
+                ForeColor = TextDark,
+            };
+
+            _progress = new ProgressBar
+            {
+                Location  = new Point(0, 28),
+                Size      = new Size(518, 18),
+                Style     = ProgressBarStyle.Marquee,
+                MarqueeAnimationSpeed = 25,
+            };
+
+            _rtbLog = new RichTextBox
+            {
+                Location    = new Point(0, 56),
+                Size        = new Size(518, 250),
+                ReadOnly    = true,
+                BackColor   = Color.FromArgb(18, 20, 28),
+                ForeColor   = Color.FromArgb(180, 230, 180),
+                Font        = FontMono,
+                ScrollBars  = RichTextBoxScrollBars.Vertical,
+                BorderStyle = BorderStyle.None,
+                WordWrap    = true,
+            };
+
+            installBox.Controls.Add(lblInstalling);
+            installBox.Controls.Add(_progress);
+            installBox.Controls.Add(_rtbLog);
+            _pageInstall.Controls.Add(installBox);
+
+            // ── Page: Done ─────────────────────────────────────────────────────
+            _pageDone = new Panel { Dock = DockStyle.Fill, BackColor = LightBg };
+
+            var doneBox = new Panel { BackColor = WhiteBg, Dock = DockStyle.Fill, Padding = new Padding(20) };
+
+            _lblDoneIcon = new Label
+            {
+                Location = new Point(0, 8),
+                Size     = new Size(60, 60),
+                Font     = new Font("Segoe UI Symbol", 36f, GraphicsUnit.Point),
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleCenter,
+            };
+            _lblDoneHeading = new Label
+            {
+                Location  = new Point(68, 20),
+                Size      = new Size(450, 32),
+                Font      = new Font("Segoe UI", 13f, FontStyle.Bold, GraphicsUnit.Point),
+                ForeColor = TextDark,
+                AutoSize  = false,
+            };
+            _lblDoneBody = new Label
+            {
+                Location  = new Point(0, 80),
+                Size      = new Size(518, 220),
+                Font      = FontBody,
+                ForeColor = TextDark,
+                AutoSize  = false,
+            };
+
+            doneBox.Controls.Add(_lblDoneIcon);
+            doneBox.Controls.Add(_lblDoneHeading);
+            doneBox.Controls.Add(_lblDoneBody);
+            _pageDone.Controls.Add(doneBox);
+
+            // ── Assemble ───────────────────────────────────────────────────────
+            _pages = new[] { _pageWelcome, _pageReady, _pageInstall, _pageDone };
+            foreach (var pg in _pages)
+                _content.Controls.Add(pg);
+
+            Controls.Add(_content);
+            Controls.Add(footerBorder);
+            Controls.Add(_footer);
+            Controls.Add(headerBorder);
+            Controls.Add(_header);
+
+            ResumeLayout(false);
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        // Page transitions
+        // ══════════════════════════════════════════════════════════════════════
+
+        private void ShowPage(int idx)
+        {
+            foreach (var pg in _pages) pg.Visible = false;
+            _pages[idx].Visible = true;
+            _currentPage        = idx;
+            _lblStep.Text       = string.Format("Step {0} of {1}", idx + 1, _pages.Length);
+
+            switch (idx)
+            {
+                case 0: // Welcome
+                    SetHeader("Welcome to PhoneVR-MotoG5 Setup",
+                               "Version 1.0 — Turn your Android phone into a SteamVR headset");
+                    _btnBack.Enabled  = false;
+                    _btnNext.Text     = "Next  →";
+                    _btnNext.Enabled  = true;
+                    _btnCancel.Text   = "Cancel";
+                    _btnCancel.Enabled = true;
+                    break;
+
+                case 1: // Ready to Install
+                    SetHeader("Ready to Install",
+                               "Review the paths below, then click Install.");
+                    _btnBack.Enabled  = true;
+                    _btnNext.Text     = "Install";
+                    _btnNext.Enabled  = true;
+                    _btnCancel.Text   = "Cancel";
+                    _btnCancel.Enabled = true;
+                    PopulateReadyPage();
+                    break;
+
+                case 2: // Installing
+                    SetHeader("Installing…",
+                               "Do not close this window.");
+                    _btnBack.Enabled  = false;
+                    _btnNext.Enabled  = false;
+                    _btnCancel.Enabled = false;
+                    RunInstall();
+                    break;
+
+                case 3: // Done
+                    SetHeader(
+                        _installSuccess ? "Installation Complete!" : "Installation Failed",
+                        _installSuccess ? "Your PC is ready. Now set up the phone app."
+                                        : "Something went wrong — see details below.");
+                    _btnBack.Enabled  = false;
+                    _btnNext.Enabled  = false;
+                    _btnCancel.Text   = "Close";
+                    _btnCancel.Enabled = true;
+                    PopulateDonePage();
+                    break;
+            }
+        }
+
+        private void SetHeader(string title, string subtitle)
+        {
+            _lblTitle.Text    = title;
+            _lblSubtitle.Text = subtitle;
+        }
+
+        // ── Ready page ─────────────────────────────────────────────────────────
+
+        private void PopulateReadyPage()
+        {
+            string sourceDir = AppDomain.CurrentDomain.BaseDirectory;
+            _txtSourcePath.Text = sourceDir;
+
+            string steam = InstallerCore.FindSteamPath();
+            if (steam != null)
+            {
+                string svr = InstallerCore.FindSteamVRPath(steam);
+                if (svr != null)
+                {
+                    _txtSteamVRPath.Text     = svr;
+                    _lblDetectStatus.Text     = "✔  SteamVR detected automatically — you're good to go!";
+                    _lblDetectStatus.ForeColor = GreenOk;
+                }
+                else
+                {
+                    _txtSteamVRPath.Text      = Path.Combine(steam, @"steamapps\common\SteamVR");
+                    _lblDetectStatus.Text      = "⚠  SteamVR folder not found. Install SteamVR via Steam and run it once, then adjust the path above.";
+                    _lblDetectStatus.ForeColor = Color.FromArgb(180, 100, 0);
+                }
+            }
+            else
+            {
+                _txtSteamVRPath.Text      = @"C:\Program Files (x86)\Steam\steamapps\common\SteamVR";
+                _lblDetectStatus.Text      = "⚠  Steam not found in registry. Please enter the SteamVR path manually.";
+                _lblDetectStatus.ForeColor = Color.FromArgb(180, 100, 0);
+            }
+        }
+
+        // ── Install ────────────────────────────────────────────────────────────
+
+        private void RunInstall()
+        {
+            string steamVRPath = _txtSteamVRPath.Text.Trim();
+            string sourceDir   = _txtSourcePath.Text.Trim();
+
+            AppendLog("PhoneVR-MotoG5 Installer  —  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            AppendLog(new string('─', 56));
+            AppendLog("");
+
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    InstallerCore.Install(sourceDir, steamVRPath, msg => Invoke(new Action(() => AppendLog(msg))));
+                    _installSuccess = true;
+                }
+                catch (Exception ex)
+                {
+                    _installSuccess = false;
+                    Invoke(new Action(() =>
+                    {
+                        _rtbLog.SelectionColor = Color.FromArgb(255, 120, 120);
+                        AppendLog("");
+                        AppendLog("ERROR: " + ex.Message);
+                    }));
+                }
+                Invoke(new Action(() =>
+                {
+                    _progress.Style = ProgressBarStyle.Continuous;
+                    _progress.Value = _installSuccess ? 100 : 0;
+                    ShowPage(3);
+                }));
+            });
+            thread.IsBackground = true;
+            thread.Start();
+        }
+
+        private void AppendLog(string msg)
+        {
+            _rtbLog.AppendText(msg + "\n");
+            _rtbLog.ScrollToCaret();
+        }
+
+        // ── Done page ──────────────────────────────────────────────────────────
+
+        private void PopulateDonePage()
+        {
+            if (_installSuccess)
+            {
+                _lblDoneIcon.Text      = "✔";
+                _lblDoneIcon.ForeColor = GreenOk;
+                _lblDoneHeading.Text   = "You're all set!";
+                _lblDoneHeading.ForeColor = GreenOk;
+                _lblDoneBody.Text =
+                    "What to do next:\n\n" +
+                    "  1.  Restart SteamVR  (close it completely, then reopen via Steam)\n\n" +
+                    "  2.  On your phone, open PhoneVR-MotoG5\n\n" +
+                    "  3.  Tap  Find PC  — the app searches the Wi-Fi network automatically\n\n" +
+                    "        —  OR  —  tap  Enter IP  and type your PC's local IP address\n\n" +
+                    "  4.  Put on your cardboard headset and enjoy!\n\n" +
+                    "If the phone can't find your PC, see TROUBLESHOOTING.md in this folder.";
+            }
+            else
+            {
+                _lblDoneIcon.Text      = "✖";
+                _lblDoneIcon.ForeColor = RedFail;
+                _lblDoneHeading.Text   = "Installation did not complete.";
+                _lblDoneHeading.ForeColor = RedFail;
+                _lblDoneBody.Text =
+                    "Common reasons and fixes:\n\n" +
+                    "  •  Did you run the installer as Administrator?\n" +
+                    "     Right-click PhoneVRInstaller.exe → \"Run as administrator\"\n\n" +
+                    "  •  Is the SteamVR path correct?\n" +
+                    "     Default: C:\\Program Files (x86)\\Steam\\steamapps\\common\\SteamVR\n\n" +
+                    "  •  Are all driver files in the same folder as this installer?\n" +
+                    "     You need: driver.vrdrivermanifest  bin\\win64\\driver_phonevr_motog5.dll\n\n" +
+                    "See the log on the previous screen, or open an issue on GitHub for help.";
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        // Button handlers
+        // ══════════════════════════════════════════════════════════════════════
+
+        private void BtnNext_Click()
+        {
+            if (_currentPage == 1)
+            {
+                if (!Directory.Exists(_txtSteamVRPath.Text.Trim()))
+                {
+                    MessageBox.Show(
+                        "The SteamVR path you entered does not exist on disk.\n\n" +
+                        "Please install SteamVR via Steam (Library → SteamVR), run it once,\n" +
+                        "then enter the correct path or click Browse…",
+                        "SteamVR Not Found",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
+            }
+            ShowPage(_currentPage + 1);
+        }
+
+        private void BtnBack_Click()
+        {
+            ShowPage(_currentPage - 1);
+        }
+
+        private void BtnCancel_Click()
+        {
+            if (_currentPage == 2) return; // no cancel while installing
+            Close();
+        }
+
+        private static void BrowseFolder(TextBox target, string description)
+        {
+            using (var dlg = new FolderBrowserDialog { Description = description, SelectedPath = target.Text })
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                    target.Text = dlg.SelectedPath;
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        // Helpers
+        // ══════════════════════════════════════════════════════════════════════
+
+        private static Button MakeButton(string text, int width, bool isPrimary)
+        {
+            var b = new Button
+            {
+                Text      = text,
+                Width     = width,
+                Height    = 30,
+                FlatStyle = isPrimary ? FlatStyle.Flat : FlatStyle.System,
+                Font      = new Font("Segoe UI", 9f, isPrimary ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Point),
+            };
+            if (isPrimary)
+            {
+                b.BackColor              = AccentBlue;
+                b.ForeColor              = Color.White;
+                b.FlatAppearance.BorderSize = 0;
+            }
+            return b;
+        }
+
+        private static Label MakeBodyLabel(string text, Rectangle bounds)
+        {
+            return new Label
+            {
+                Text      = text,
+                Bounds    = bounds,
+                Font      = FontBody,
+                ForeColor = TextDark,
+                AutoSize  = false,
+            };
+        }
+
+        private static void StyleTextBox(TextBox tb)
+        {
+            tb.Height = 24;
+            tb.BorderStyle = BorderStyle.FixedSingle;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                FontTitle.Dispose();
+                FontSubtitle.Dispose();
+                FontBody.Dispose();
+                FontBold9.Dispose();
+                FontMono.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+    }
+}

@@ -1,0 +1,24 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-only
+  PhoneVR-MotoG5 — installer-gui/PhoneVRInstaller.csproj
+  .NET Framework 4.7.2 WinForms setup wizard (ships as a standalone .exe)
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>PhoneVRInstaller</AssemblyName>
+    <RootNamespace>PhoneVRInstaller</RootNamespace>
+    <Version>1.0.0</Version>
+    <Company>PhoneVR-MotoG5 Contributors</Company>
+    <Product>PhoneVR-MotoG5 Setup</Product>
+    <Description>PhoneVR-MotoG5 PC Driver Installer — Turns your Android phone into a SteamVR headset</Description>
+    <Copyright>Copyright © 2024 PhoneVR-MotoG5 contributors. GPL-3.0-only.</Copyright>
+    <LangVersion>8</LangVersion>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+</Project>
