@@ -61,7 +61,8 @@ namespace PhoneVRInstaller
 
         // ── Install-page controls ─────────────────────────────────────────────
         private ProgressBar  _progress;
-        private RichTextBox  _rtbLog;
+        private Label        _lblStatus;
+        private TextBox      _txtLog;
 
         // ── Done-page controls ────────────────────────────────────────────────
         private Label      _lblDoneIcon;
@@ -216,21 +217,23 @@ namespace PhoneVRInstaller
 
             // Checklist items
             string[] checks = {
-                "✔  SteamVR installed and run at least once",
+                "✔  SteamVR installed and launched at least once",
+                "     ↳  Don't have it? Open Steam → Library → SteamVR → Install, then launch it once.",
                 "✔  Your PC and phone are on the same Wi-Fi network (5 GHz recommended)",
                 "✔  The PhoneVR-MotoG5 APK installed on your Android phone",
                 "✔  This installer is in the same folder as the driver files (from the release zip)",
             };
-            var checkPanel = new Panel { Location = new Point(0, 98), Size = new Size(510, 100) };
+            var checkPanel = new Panel { Location = new Point(0, 98), Size = new Size(510, 120) };
             for (int i = 0; i < checks.Length; i++)
             {
+                bool isSubNote = checks[i].StartsWith("     ↳");
                 var lbl = new Label
                 {
                     Text      = checks[i],
-                    Location  = new Point(8, i * 24),
-                    Size      = new Size(502, 22),
-                    Font      = FontBody,
-                    ForeColor = TextDark,
+                    Location  = new Point(isSubNote ? 20 : 8, i * 22),
+                    Size      = new Size(502, 20),
+                    Font      = isSubNote ? FontSubtitle : FontBody,
+                    ForeColor = isSubNote ? TextMid : TextDark,
                 };
                 checkPanel.Controls.Add(lbl);
             }
@@ -238,10 +241,10 @@ namespace PhoneVRInstaller
             // "What will happen" note
             var lblWillDo = MakeBodyLabel(
                 "The installer will automatically:\n" +
-                "  • Copy the driver to your SteamVR drivers folder\n" +
+                "  • Copy the driver files to your SteamVR drivers folder\n" +
                 "  • Enable multi-driver support in SteamVR settings\n" +
-                "  • Add Windows Firewall rules for network communication",
-                new Rectangle(0, 206, 510, 76));
+                "  • Add Windows Firewall rules so your phone can connect",
+                new Rectangle(0, 226, 510, 68));
             lblWillDo.ForeColor = TextMid;
 
             welcomeBox.Controls.Add(lblIntro);
@@ -313,7 +316,7 @@ namespace PhoneVRInstaller
 
             var lblInstalling = new Label
             {
-                Text      = "Please wait — this takes less than 10 seconds…",
+                Text      = "Please wait while the driver is being installed…",
                 Location  = new Point(0, 0),
                 Size      = new Size(518, 20),
                 Font      = FontBold9,
@@ -322,28 +325,39 @@ namespace PhoneVRInstaller
 
             _progress = new ProgressBar
             {
-                Location  = new Point(0, 28),
-                Size      = new Size(518, 18),
+                Location  = new Point(0, 30),
+                Size      = new Size(518, 20),
                 Style     = ProgressBarStyle.Marquee,
                 MarqueeAnimationSpeed = 25,
             };
 
-            _rtbLog = new RichTextBox
+            _lblStatus = new Label
             {
-                Location    = new Point(0, 56),
-                Size        = new Size(518, 250),
+                Location  = new Point(0, 60),
+                Size      = new Size(518, 20),
+                Font      = FontBody,
+                ForeColor = TextMid,
+                Text      = "Starting…",
+            };
+
+            _txtLog = new TextBox
+            {
+                Location    = new Point(0, 90),
+                Size        = new Size(518, 220),
                 ReadOnly    = true,
-                BackColor   = Color.FromArgb(18, 20, 28),
-                ForeColor   = Color.FromArgb(180, 230, 180),
-                Font        = FontMono,
-                ScrollBars  = RichTextBoxScrollBars.Vertical,
-                BorderStyle = BorderStyle.None,
+                Multiline   = true,
+                ScrollBars  = ScrollBars.Vertical,
+                BackColor   = Color.FromArgb(248, 249, 250),
+                ForeColor   = TextDark,
+                Font        = FontBody,
+                BorderStyle = BorderStyle.FixedSingle,
                 WordWrap    = true,
             };
 
             installBox.Controls.Add(lblInstalling);
             installBox.Controls.Add(_progress);
-            installBox.Controls.Add(_rtbLog);
+            installBox.Controls.Add(_lblStatus);
+            installBox.Controls.Add(_txtLog);
             _pageInstall.Controls.Add(installBox);
 
             // ── Page: Done ─────────────────────────────────────────────────────
@@ -513,9 +527,9 @@ namespace PhoneVRInstaller
                     _installSuccess = false;
                     Invoke(new Action(() =>
                     {
-                        _rtbLog.SelectionColor = Color.FromArgb(255, 120, 120);
                         AppendLog("");
                         AppendLog("ERROR: " + ex.Message);
+                        _lblStatus.ForeColor = Color.FromArgb(196, 48, 48);
                     }));
                 }
                 Invoke(new Action(() =>
@@ -531,8 +545,11 @@ namespace PhoneVRInstaller
 
         private void AppendLog(string msg)
         {
-            _rtbLog.AppendText(msg + "\n");
-            _rtbLog.ScrollToCaret();
+            _txtLog.AppendText(msg + "\r\n");
+            _txtLog.SelectionStart = _txtLog.Text.Length;
+            _txtLog.ScrollToCaret();
+            if (!string.IsNullOrWhiteSpace(msg))
+                _lblStatus.Text = msg.TrimStart(' ', '\t');
         }
 
         // ── Done page ──────────────────────────────────────────────────────────
