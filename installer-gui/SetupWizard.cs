@@ -64,9 +64,10 @@ namespace PhoneVRInstaller
         private Label      _lblDoneIcon;
         private Label      _lblDoneHeading;
         private Label      _lblDoneBody;
-
+        private LinkLabel  _linkGetApp;
         // ── State ──────────────────────────────────────────────────────────────
-        private bool _installSuccess;
+        private bool   _installSuccess;
+        private string _lastError;
 
         public SetupWizard()
         {
@@ -330,32 +331,69 @@ namespace PhoneVRInstaller
 
             _lblDoneIcon = new Label
             {
-                Location = new Point(0, 8),
-                Size     = new Size(60, 60),
-                Font     = new Font("Segoe UI Symbol", 36f, GraphicsUnit.Point),
-                AutoSize = false,
+                Location  = new Point(0, 8),
+                Size      = new Size(52, 52),
+                Font      = new Font("Segoe UI Symbol", 32f, GraphicsUnit.Point),
+                AutoSize  = false,
                 TextAlign = ContentAlignment.MiddleCenter,
             };
             _lblDoneHeading = new Label
             {
-                Location  = new Point(68, 20),
-                Size      = new Size(450, 32),
+                Location  = new Point(60, 16),
+                Size      = new Size(458, 32),
                 Font      = new Font("Segoe UI", 13f, FontStyle.Bold, GraphicsUnit.Point),
                 ForeColor = TextDark,
                 AutoSize  = false,
             };
             _lblDoneBody = new Label
             {
-                Location  = new Point(0, 80),
-                Size      = new Size(518, 220),
+                Location  = new Point(0, 70),
+                Size      = new Size(518, 130),
                 Font      = FontBody,
                 ForeColor = TextDark,
+                AutoSize  = false,
+            };
+
+            // Phone app section (success only)
+            var lblPhoneHeading = new Label
+            {
+                Location  = new Point(0, 208),
+                Size      = new Size(518, 20),
+                Text      = "Get the app on your Android phone:",
+                Font      = FontBold9,
+                ForeColor = TextDark,
+            };
+            _linkGetApp = new LinkLabel
+            {
+                Location  = new Point(0, 230),
+                Size      = new Size(518, 18),
+                Text      = "Download PhoneVR-MotoG5 APK  →  github.com/CyberBrainiac1/PhoneVR-MotoG5/releases",
+                Font      = FontBody,
+                AutoSize  = false,
+            };
+            _linkGetApp.Click += (s, e) =>
+                System.Diagnostics.Process.Start(
+                    "https://github.com/CyberBrainiac1/PhoneVR-MotoG5/releases/latest");
+
+            var lblPhoneSteps = new Label
+            {
+                Location  = new Point(0, 254),
+                Size      = new Size(518, 80),
+                Text      =
+                    "  1.  On your phone, open the downloaded APK and tap Install\n" +
+                    "  2.  Open PhoneVR-MotoG5 and tap Find PC (auto-discovers on Wi-Fi)\n" +
+                    "  3.  Restart SteamVR, slot your phone into a Cardboard headset — enjoy!",
+                Font      = FontBody,
+                ForeColor = TextMid,
                 AutoSize  = false,
             };
 
             doneBox.Controls.Add(_lblDoneIcon);
             doneBox.Controls.Add(_lblDoneHeading);
             doneBox.Controls.Add(_lblDoneBody);
+            doneBox.Controls.Add(lblPhoneHeading);
+            doneBox.Controls.Add(_linkGetApp);
+            doneBox.Controls.Add(lblPhoneSteps);
             _pageDone.Controls.Add(doneBox);
 
             // ── Assemble ───────────────────────────────────────────────────────
@@ -409,10 +447,10 @@ namespace PhoneVRInstaller
                     SetHeader(
                         _installSuccess ? "Installation Complete!" : "Installation Failed",
                         _installSuccess ? "Your PC is ready. Now set up the phone app."
-                                        : "Something went wrong — see details below.");
+                                        : "Something went wrong — see the error below.");
                     _btnBack.Enabled   = false;
                     _btnNext.Enabled   = false;
-                    _btnCancel.Text    = "Close";
+                    _btnCancel.Text    = _installSuccess ? "Close" : "Try Again";
                     _btnCancel.Enabled = true;
                     PopulateDonePage();
                     break;
@@ -479,6 +517,7 @@ namespace PhoneVRInstaller
                 catch (Exception ex)
                 {
                     _installSuccess = false;
+                    _lastError = ex.Message;
                     Invoke(new Action(() =>
                     {
                         AppendLog("");
@@ -505,35 +544,43 @@ namespace PhoneVRInstaller
 
         private void PopulateDonePage()
         {
+            // Show phone-app section only on success
+            foreach (Control c in _pageDone.Controls[0].Controls)
+            {
+                if (c != _lblDoneIcon && c != _lblDoneHeading && c != _lblDoneBody)
+                    c.Visible = _installSuccess;
+            }
+
             if (_installSuccess)
             {
-                _lblDoneIcon.Text      = "✔";
-                _lblDoneIcon.ForeColor = GreenOk;
-                _lblDoneHeading.Text   = "You're all set!";
+                _lblDoneIcon.Text         = "✔";
+                _lblDoneIcon.ForeColor    = GreenOk;
+                _lblDoneHeading.Text      = "Driver installed! Now set up your phone.";
                 _lblDoneHeading.ForeColor = GreenOk;
                 _lblDoneBody.Text =
-                    "What to do next:\n\n" +
-                    "  1.  Restart SteamVR  (close it completely, then reopen via Steam)\n\n" +
-                    "  2.  On your phone, open PhoneVR-MotoG5\n\n" +
-                    "  3.  Tap  Find PC  — the app searches the Wi-Fi network automatically\n\n" +
-                    "        —  OR  —  tap  Enter IP  and type your PC's local IP address\n\n" +
-                    "  4.  Put on your cardboard headset and enjoy!\n\n" +
-                    "If the phone can't find your PC, see TROUBLESHOOTING.md in this folder.";
+                    "PC driver is ready. Here's what to do next:\n\n" +
+                    "  •  Restart SteamVR (close and reopen it via Steam)\n" +
+                    "  •  Download the APK below and install it on your Motorola / Android phone\n" +
+                    "  •  Open the app on your phone → tap  Find PC  (auto-discovers on Wi-Fi)\n" +
+                    "  •  Slot the phone into a Google Cardboard viewer — you're in VR!";
             }
             else
             {
-                _lblDoneIcon.Text      = "✖";
-                _lblDoneIcon.ForeColor = RedFail;
-                _lblDoneHeading.Text   = "Installation did not complete.";
+                _lblDoneIcon.Text         = "✖";
+                _lblDoneIcon.ForeColor    = RedFail;
+                _lblDoneHeading.Text      = "Installation did not complete.";
                 _lblDoneHeading.ForeColor = RedFail;
+
+                string errorLine = string.IsNullOrEmpty(_lastError) ? "" :
+                    "Error: " + _lastError + "\n\n";
+
                 _lblDoneBody.Text =
-                    "Common reasons and fixes:\n\n" +
-                    "  •  Run the installer as Administrator:\n" +
-                    "     Right-click PhoneVRInstaller.exe → \"Run as administrator\"\n\n" +
-                    "  •  Check your internet connection and try again.\n\n" +
-                    "  •  Is the SteamVR path correct?\n" +
-                    "     Default: C:\\Program Files (x86)\\Steam\\steamapps\\common\\SteamVR\n\n" +
-                    "See the log above, or open an issue on GitHub for help.";
+                    errorLine +
+                    "Things to try:\n\n" +
+                    "  1.  Click \"Try Again\" — the button below restarts the install\n" +
+                    "  2.  Run as Administrator: right-click the .exe → Run as administrator\n" +
+                    "  3.  Check your internet connection (downloads ~2 MB from GitHub)\n" +
+                    "  4.  Make sure SteamVR has been installed and launched at least once";
             }
         }
 
@@ -568,6 +615,19 @@ namespace PhoneVRInstaller
         private void BtnCancel_Click()
         {
             if (_currentPage == 1) return; // no cancel while installing
+            if (_currentPage == 2 && !_installSuccess)
+            {
+                // "Try Again" — reset state and go back to Welcome
+                _installSuccess = false;
+                _lastError      = null;
+                _txtLog.Clear();
+                _progress.Value = 0;
+                _progress.Style = ProgressBarStyle.Marquee;
+                _lblStatus.Text      = "Starting…";
+                _lblStatus.ForeColor = TextMid;
+                ShowPage(0);
+                return;
+            }
             Close();
         }
 
