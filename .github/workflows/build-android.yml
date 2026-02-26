@@ -40,15 +40,14 @@ jobs:
       - name: Install NDK and CMake
         run: sdkmanager "ndk;25.2.9519653" "cmake;3.22.1"
 
-      - name: Make gradlew executable
-        working-directory: android-app
-        run: |
-          sed -i 's/\r$//' gradlew
-          chmod +x gradlew
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.4"
 
       - name: Build APK
         working-directory: android-app
-        run: ./gradlew assembleDebug --no-daemon
+        run: gradle assembleDebug --no-daemon
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
 
