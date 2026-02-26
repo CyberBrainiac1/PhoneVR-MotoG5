@@ -112,15 +112,15 @@ New-NetFirewallRule -DisplayName "PhoneVR Pose UDP In" -Direction Inbound `
 > Note: The standard Moto G5 (XT1675/XT1676) and G5 Plus (XT1686/XT1687) **do** include a
 > gyroscope. Only the budget US variant, the G5 Play (XT1920), lacks one.
 
-If the yellow "No gyroscope" banner is visible in the app, the accel+magnetometer fallback is in use:
+If the yellow "No gyroscope" banner is visible in the app, Android's built-in sensor fusion
+will use accelerometer + magnetometer only (instead of the full gyro+accel+mag EKF):
 - Keep away from metal objects and speakers (magnetic interference).
 - Use the **Recenter** button after repositioning.
-- Increase filter gain slightly: in `ConnectionManager.kt`, adjust `MadgwickAHRS.beta`.
 
 **With gyroscope (Moto G5 / G5 Plus, or any phone with a gyro)**:
-- Gyro drift accumulates over time. The complementary filter corrects slowly using accelerometer gravity reference.
-- Increase `poseAlpha` in settings (range 0.0–1.0, default 0.85) for smoother but slightly laggier tracking.
-- Decrease for faster response but more noise.
+- Tracking uses Android's hardware EKF (gyro + accel + mag) which corrects drift automatically.
+- Tap **Recenter** if the view drifts after extended use.
+- Filter tuning is handled at the OS level — no manual parameters to adjust.
 
 ---
 

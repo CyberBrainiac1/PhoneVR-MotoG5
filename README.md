@@ -102,9 +102,9 @@ The Moto G5 family has three variants with different sensor hardware:
 
 | Model | Gyroscope | Tracking mode | Notes |
 |-------|-----------|---------------|-------|
-| **Moto G5** (XT1675/XT1676) | ✅ Yes | Gyro + accel complementary filter | Best accuracy — recommended |
-| **Moto G5 Plus** (XT1686/XT1687) | ✅ Yes | Gyro + accel complementary filter | Best accuracy — recommended |
-| **Moto G5 Play** (XT1920) | ❌ No | Accel + magnetometer (Madgwick) | Budget US variant — still works |
+| **Moto G5** (XT1675/XT1676) | ✅ Yes | Android EKF — gyro + accel + mag | Best accuracy — recommended |
+| **Moto G5 Plus** (XT1686/XT1687) | ✅ Yes | Android EKF — gyro + accel + mag | Best accuracy — recommended |
+| **Moto G5 Play** (XT1920) | ❌ No | Android EKF — accel + mag only | Budget US variant — still works |
 
 The app **detects the gyroscope automatically at runtime** and uses the best available sensor combination.
 If you have a Moto G5 or G5 Plus, you get full gyroscope-based tracking with no caveats.

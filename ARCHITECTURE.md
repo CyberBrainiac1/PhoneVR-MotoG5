@@ -85,16 +85,21 @@ StreamingService (foreground)
 ### Sensor Tracking
 
 ```
-Gyroscope available?   (Moto G5 XT1675/XT1676 and G5 Plus XT1686/XT1687: YES
-                        Moto G5 Play XT1920 budget variant: NO — accel+mag fallback)
+Android TYPE_ROTATION_VECTOR (hardware EKF — battle-tested OS sensor fusion)
+    │
+    ├─ Gyroscope present? (G5 XT1675/XT1676 and G5 Plus: YES)
+    │       → OS fuses gyroscope + accelerometer + magnetometer
+    │         at ~200 Hz with hardware-assisted Kalman filter
+    │
+    └─ No gyroscope (G5 Play XT1920: NO)
+            → OS falls back to TYPE_GEOMAGNETIC_ROTATION_VECTOR
+              (accelerometer + magnetometer only, ~50 Hz)
+            → Warning banner shown to user
 
-    YES → TYPE_GYROSCOPE integration (low noise, high frequency ~200 Hz)
-          + TYPE_ACCELEROMETER for gravity correction
-          → complementary filter: q = α*(q + ω*dt) + (1-α)*accel_q
-
-    NO  → TYPE_ACCELEROMETER + TYPE_MAGNETIC_FIELD (~50 Hz)
-          → Madgwick AHRS filter
-          → Warning banner shown to user about reduced accuracy
+SensorManager.getQuaternionFromVector()  →  (w, x, y, z)
+PoseEstimator.setQuaternion()            →  reorder to (x, y, z, w) wire format
+PoseEstimator.getQuaternion()            →  apply recenter offset:  q = recenter⁻¹ ⊗ q_raw
+ConnectionManager.sendPose()             →  UDP 33335 to PC driver
 ```
 
 ### Video Pipeline
