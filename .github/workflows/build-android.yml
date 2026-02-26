@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # PhoneVR-MotoG5 — .github/workflows/build-android.yml
-# Builds the Android APK (minSdk 24) on every push and PR.
+# Builds the Android APK and uploads it to the GitHub release on every push
+# to the main branches.  Can also be triggered manually via the Actions UI.
 name: Build Android APK
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main", "copilot/**"]
     paths:
       - 'android-app/**'
       - '.github/workflows/build-android.yml'
@@ -13,13 +14,14 @@ on:
     paths:
       - 'android-app/**'
       - '.github/workflows/build-android.yml'
+  workflow_dispatch: {}    # manual "Run workflow" button in the Actions UI
 
 jobs:
   build:
     name: Build PhoneVR-MotoG5.apk
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write    # needed to upload release assets
 
     steps:
       - name: Checkout repository
@@ -30,28 +32,45 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
 
-      - name: Set up Android SDK and NDK
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: 9477386
 
       - name: Install NDK and CMake
         run: sdkmanager "ndk;25.2.9519653" "cmake;3.22.1"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: "8.4"
-
-      - name: Build debug APK
+      - name: Make gradlew executable
         working-directory: android-app
-        run: gradle assembleDebug --no-daemon
+        run: chmod +x gradlew
 
-      - name: Upload APK artifact
+      - name: Build APK
+        working-directory: android-app
+        run: ./gradlew assembleDebug --no-daemon
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+
+      - name: Rename APK
+        run: |
+          APK=$(find android-app/app/build/outputs/apk/debug/ -name "*.apk" | head -1)
+          cp "$APK" phonevr-motog5.apk
+          echo "APK_PATH=$PWD/phonevr-motog5.apk" >> "$GITHUB_ENV"
+
+      - name: Upload APK artifact (always)
         uses: actions/upload-artifact@v4
         with:
-          name: PhoneVR-MotoG5-debug
-          path: android-app/app/build/outputs/apk/debug/
+          name: phonevr-motog5
+          path: phonevr-motog5.apk
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
+
+      # Upload to the GitHub release on every non-PR push to main branches
+      - name: Upload APK to GitHub Release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Find the latest release tag, fall back to v1.0.0
+          TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "v1.0.0")
+          echo "Uploading to release $TAG"
+          gh release upload "$TAG" phonevr-motog5.apk --clobber
