@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# PhoneVR-MotoG5 — .github/workflows/build-driver.yml
+# Builds the Windows SteamVR OpenVR driver DLL on every push and PR.
+name: Build Driver (Windows)
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - 'pc-driver/**'
+      - '.github/workflows/build-driver.yml'
+  pull_request:
+    paths:
+      - 'pc-driver/**'
+      - '.github/workflows/build-driver.yml'
+
+jobs:
+  build:
+    name: Build driver_phonevr_motog5.dll
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg\installed
+          key: vcpkg-x264-${{ runner.os }}-${{ hashFiles('pc-driver/CMakeLists.txt') }}
+          restore-keys: vcpkg-x264-${{ runner.os }}-
+
+      - name: Install x264 via vcpkg
+        run: |
+          vcpkg install x264:x64-windows
+          vcpkg integrate install
+        shell: pwsh
+
+      - name: Clone OpenVR SDK
+        run: |
+          git clone --depth 1 https://github.com/ValveSoftware/openvr.git pc-driver/third_party/openvr
+        shell: pwsh
+
+      - name: Configure CMake
+        working-directory: pc-driver
+        run: |
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+            -DVCPKG_TARGET_TRIPLET=x64-windows
+        shell: pwsh
+
+      - name: Build
+        working-directory: pc-driver
+        run: cmake --build build --config Release
+        shell: pwsh
+
+      - name: Collect artifacts
+        run: |
+          New-Item -ItemType Directory -Path artifact\bin\win64 -Force
+          Copy-Item pc-driver\build\Release\driver_phonevr_motog5.dll artifact\bin\win64\
+          Copy-Item pc-driver\driver_manifest.json artifact\driver.vrdrivermanifest
+          Copy-Item -Recurse pc-driver\resources artifact\resources
+        shell: pwsh
+
+      - name: Upload driver artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: driver_phonevr_motog5-windows
+          path: artifact/
+          retention-days: 30

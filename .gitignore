@@ -1,0 +1,32 @@
+# PhoneVR-MotoG5 — .gitignore
+
+# PC Driver build artifacts
+pc-driver/build/
+pc-driver/third_party/openvr/
+
+# Android build artifacts
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+android-app/local.properties
+
+# IDE files
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Gradle wrapper JAR (large binary; download on first build)
+android-app/gradle/wrapper/gradle-wrapper.jar
+
+# Windows build artifacts
+*.obj
+*.pdb
+*.exp
+*.lib
+Release/
+Debug/
+x64/
