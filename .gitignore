@@ -25,6 +25,7 @@ android-app/gradle/wrapper/gradle-wrapper.jar
 # CodeQL analysis artifacts
 _codeql_detected_source_root
 pc-driver/_codeql_build_dir/
+pc-driver/pc-driver
 *.pdb
 *.exp
 *.lib
