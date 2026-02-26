@@ -3,8 +3,9 @@
 // Copyright (C) 2024 PhoneVR-MotoG5 contributors
 //
 // tracking/SensorTracker.kt — Sensor listener that feeds into PoseEstimator.
-// Prefers gyroscope (TYPE_GYROSCOPE). If not available (common on Moto G5 Play)
-// falls back to accelerometer + magnetometer with Madgwick filter.
+// Prefers gyroscope (TYPE_GYROSCOPE). If not available (only the budget Moto G5 Play
+// XT1920 lacks one — the standard Moto G5 XT1675/XT1676 and G5 Plus XT1686/XT1687
+// both include a gyroscope) falls back to accelerometer + magnetometer with Madgwick filter.
 
 package com.phonevrmotog5.tracking
 

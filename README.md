@@ -10,7 +10,7 @@
 
 ## What is this?
 
-PhoneVR-MotoG5 lets you use an Android phone — particularly the **Motorola Moto G5 Play** — as a
+PhoneVR-MotoG5 lets you use an Android phone — particularly the **Motorola Moto G5 family** — as a
 SteamVR headset over your home Wi-Fi network.  Your PC streams the game video to the phone; the
 phone sends head-tracking data back.  Slot the phone into a cardboard or plastic Google Cardboard
 viewer and you have a working (if budget) VR experience.
@@ -27,7 +27,7 @@ devices that crashed with the upstream codebase.
 |------|---------|
 | Windows 10 or 11 PC | Your gaming PC |
 | SteamVR | Free on Steam — search "SteamVR" in your Steam library |
-| Android 7.0+ phone | Moto G5 Play or any Android 7.0 (API 24) device |
+| Android 7.0+ phone | Moto G5 / G5 Plus (full gyro tracking) or Moto G5 Play (accel fallback) — or any Android 7.0 (API 24)+ device |
 | Google Cardboard viewer | Available on Amazon for ~$10 |
 | Same Wi-Fi network | Both PC and phone on the same router, 5 GHz strongly recommended |
 
@@ -96,14 +96,23 @@ The installer automatically:
 
 ---
 
-## ⚠️ Moto G5 Play has no gyroscope — that's fine
+## 📱 Moto G5 model variants — gyroscope support
 
-The Moto G5 Play does **not** include a gyroscope.  PhoneVR-MotoG5 detects this
-automatically and uses **accelerometer + magnetometer** with a Madgwick AHRS filter instead.
+The Moto G5 family has three variants with different sensor hardware:
 
-You will see a yellow banner in the app.  Tracking still works — just keep in mind:
-- Keep the phone away from speakers, magnetic mounts, and metal surfaces.
-- Tap **Recenter** to fix any drift.
+| Model | Gyroscope | Tracking mode | Notes |
+|-------|-----------|---------------|-------|
+| **Moto G5** (XT1675/XT1676) | ✅ Yes | Gyro + accel complementary filter | Best accuracy — recommended |
+| **Moto G5 Plus** (XT1686/XT1687) | ✅ Yes | Gyro + accel complementary filter | Best accuracy — recommended |
+| **Moto G5 Play** (XT1920) | ❌ No | Accel + magnetometer (Madgwick) | Budget US variant — still works |
+
+The app **detects the gyroscope automatically at runtime** and uses the best available sensor combination.
+If you have a Moto G5 or G5 Plus, you get full gyroscope-based tracking with no caveats.
+If you have a Moto G5 Play (the US budget model), you will see a yellow warning banner and tracking
+will use the accelerometer + magnetometer fallback — still usable, just keep away from magnets.
+
+> **Not sure which model you have?** Open your phone's **Settings → About phone → Model number**.
+> XT1675 or XT1676 = G5. XT1686 or XT1687 = G5 Plus. XT1920 = G5 Play.
 
 ---
 

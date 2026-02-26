@@ -85,7 +85,9 @@ StreamingService (foreground)
 ### Sensor Tracking
 
 ```
-Gyroscope available?
+Gyroscope available?   (Moto G5 XT1675/XT1676 and G5 Plus XT1686/XT1687: YES
+                        Moto G5 Play XT1920 budget variant: NO — accel+mag fallback)
+
     YES → TYPE_GYROSCOPE integration (low noise, high frequency ~200 Hz)
           + TYPE_ACCELEROMETER for gravity correction
           → complementary filter: q = α*(q + ω*dt) + (1-α)*accel_q

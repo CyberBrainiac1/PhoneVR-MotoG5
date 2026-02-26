@@ -108,13 +108,16 @@ New-NetFirewallRule -DisplayName "PhoneVR Pose UDP In" -Direction Inbound `
 
 **Symptom**: The view slowly drifts, or shakes even when the phone is still.
 
-**No gyroscope (Moto G5 Play)**:
-- The accelerometer + magnetometer fallback is inherently less stable than a gyro.
+**Moto G5 Play only — no gyroscope**:
+> Note: The standard Moto G5 (XT1675/XT1676) and G5 Plus (XT1686/XT1687) **do** include a
+> gyroscope. Only the budget US variant, the G5 Play (XT1920), lacks one.
+
+If the yellow "No gyroscope" banner is visible in the app, the accel+magnetometer fallback is in use:
 - Keep away from metal objects and speakers (magnetic interference).
 - Use the **Recenter** button after repositioning.
 - Increase filter gain slightly: in `ConnectionManager.kt`, adjust `MadgwickAHRS.beta`.
 
-**With gyroscope**:
+**With gyroscope (Moto G5 / G5 Plus, or any phone with a gyro)**:
 - Gyro drift accumulates over time. The complementary filter corrects slowly using accelerometer gravity reference.
 - Increase `poseAlpha` in settings (range 0.0–1.0, default 0.85) for smoother but slightly laggier tracking.
 - Decrease for faster response but more noise.
@@ -125,9 +128,16 @@ New-NetFirewallRule -DisplayName "PhoneVR Pose UDP In" -Direction Inbound `
 
 **Symptom**: App shows yellow warning banner on startup.
 
-This is **expected** on the Moto G5 Play. The accelerometer + magnetometer fallback will be
-used automatically. Tracking quality will be reduced compared to gyroscope-equipped phones.
-The app is still usable for stationary/low-movement experiences.
+This only occurs on the **Moto G5 Play** (model XT1920) — the budget US variant that shipped
+without a gyroscope.  The standard **Moto G5** (XT1675/XT1676) and **Moto G5 Plus**
+(XT1686/XT1687) both include a gyroscope and will **not** show this warning.
+
+If you see the banner, the accelerometer + magnetometer fallback will be used automatically.
+Tracking quality will be somewhat reduced compared to gyroscope-equipped phones, but the app
+is still usable for stationary and low-movement experiences.
+
+> **Not sure which G5 you have?** Go to **Settings → About phone → Model number**.
+> XT1675/XT1676 = standard G5 (has gyro). XT1920 = G5 Play (no gyro).
 
 ---
 

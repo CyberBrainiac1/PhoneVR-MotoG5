@@ -18,7 +18,9 @@
 
     <!-- Sensors -->
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="true" />
-    <!-- Gyroscope is optional — we fall back to accel+mag on Moto G5 Play -->
+    <!-- Gyroscope is optional — the Moto G5 (XT1675/XT1676) and G5 Plus include one;
+         only the budget Moto G5 Play (XT1920) does not. We fall back to accel+mag
+         when no gyroscope is detected at runtime. -->
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.compass"   android:required="false" />
 
