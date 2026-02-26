@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // PhoneVR-MotoG5 — installer-gui/InstallerCore.cs
-// Port of installer/install.ps1 into C# for the GUI wizard.
 
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
+using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
@@ -16,99 +17,131 @@ namespace PhoneVRInstaller
     /// </summary>
     internal static class InstallerCore
     {
-        internal const string DriverName      = "phonevr_motog5";
-        internal const string DriverDll       = "driver_phonevr_motog5.dll";
-        internal const int    DiscoveryPort   = 33333;
-        internal const int    ControlPort     = 33334;
-        internal const int    PosePort        = 33335;
+        internal const string DriverName    = "phonevr_motog5";
+        internal const string DriverDll     = "driver_phonevr_motog5.dll";
+        internal const int    DiscoveryPort = 33333;
+        internal const int    ControlPort   = 33334;
+        internal const int    PosePort      = 33335;
+
+        // Latest driver zip published on GitHub Releases
+        internal const string DriverZipUrl =
+            "https://github.com/CyberBrainiac1/PhoneVR-MotoG5/releases/latest/download/phonevr-motog5-driver.zip";
 
         // ── Registry discovery ────────────────────────────────────────────────
 
-        /// <summary>Returns the Steam installation path, or null if not found.</summary>
         internal static string FindSteamPath()
         {
-            string path;
-            path = ReadReg(Registry.LocalMachine, @"SOFTWARE\WOW6432Node\Valve\Steam");
-            if (path != null) return path;
-            path = ReadReg(Registry.LocalMachine, @"SOFTWARE\Valve\Steam");
-            if (path != null) return path;
-            return ReadReg(Registry.CurrentUser, @"SOFTWARE\Valve\Steam");
+            return ReadReg(Registry.LocalMachine, @"SOFTWARE\WOW6432Node\Valve\Steam")
+                ?? ReadReg(Registry.LocalMachine, @"SOFTWARE\Valve\Steam")
+                ?? ReadReg(Registry.CurrentUser,  @"SOFTWARE\Valve\Steam");
         }
 
-        /// <summary>Returns the SteamVR path under the given Steam root, or null.</summary>
         internal static string FindSteamVRPath(string steamPath)
         {
             var p = Path.Combine(steamPath, @"steamapps\common\SteamVR");
             return Directory.Exists(p) ? p : null;
         }
 
-        // ── Main install routine ───────────────────────────────────────────────
+        // ── Full download + install (called from the wizard) ──────────────────
 
         /// <summary>
-        /// Install the driver from <paramref name="sourceDir"/> into SteamVR.
-        /// Calls <paramref name="log"/> with human-readable progress messages.
-        /// Throws on unrecoverable errors.
+        /// Downloads the driver zip from GitHub, extracts to a temp folder,
+        /// installs into SteamVR, then cleans up.
+        /// <paramref name="progress"/> receives 0-100 values.
         /// </summary>
-        internal static void Install(string sourceDir, string steamVRPath, Action<string> log)
+        internal static void DownloadAndInstall(
+            string steamVRPath,
+            Action<string> log,
+            Action<int> progress)
         {
-            // ── 1. Copy driver files ──────────────────────────────────────────
-            log("📁  Preparing driver directory…");
+            string tempDir = Path.Combine(
+                Path.GetTempPath(), "PhoneVR_Install_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                // Step 1 — Download ───────────────────────────────────────────
+                log("Connecting to GitHub…");
+                progress(5);
+
+                string zipPath = Path.Combine(tempDir, "driver.zip");
+                using (var wc = new WebClient())
+                {
+                    wc.Headers["User-Agent"] = "PhoneVR-MotoG5-Installer/1.0";
+                    wc.DownloadProgressChanged += (s, e) =>
+                        progress(5 + (int)(e.ProgressPercentage * 0.40)); // 5–45 %
+                    // Use synchronous overload — we're already on a background thread
+                    wc.DownloadFile(DriverZipUrl, zipPath);
+                }
+                progress(50);
+                log("Download complete.");
+
+                // Step 2 — Extract ────────────────────────────────────────────
+                log("Extracting files…");
+                string extractDir = Path.Combine(tempDir, "extracted");
+                ZipFile.ExtractToDirectory(zipPath, extractDir);
+                progress(60);
+
+                // Zip may wrap everything in a single sub-folder
+                string sourceDir = FindDriverRoot(extractDir);
+                log("Files ready.");
+
+                // Step 3 — Install files ───────────────────────────────────────
+                InstallFiles(sourceDir, steamVRPath, log);
+                progress(85);
+
+                // Step 4 — Firewall ───────────────────────────────────────────
+                log("Adding firewall rules…");
+                AddFirewallRule("PhoneVR Discovery UDP In", "UDP", DiscoveryPort, log);
+                AddFirewallRule("PhoneVR Control TCP In",   "TCP", ControlPort,   log);
+                AddFirewallRule("PhoneVR Pose UDP In",      "UDP", PosePort,      log);
+
+                progress(100);
+                log("Done!");
+            }
+            finally
+            {
+                try { Directory.Delete(tempDir, recursive: true); } catch { /* best-effort */ }
+            }
+        }
+
+        // ── Core file-copy install ────────────────────────────────────────────
+
+        private static void InstallFiles(string sourceDir, string steamVRPath, Action<string> log)
+        {
+            log("Installing driver files…");
             string driverDest = Path.Combine(steamVRPath, "drivers", DriverName);
 
             if (Directory.Exists(driverDest))
             {
-                log("    Removing previous installation…");
+                log("Removing previous installation…");
                 Directory.Delete(driverDest, recursive: true);
             }
             Directory.CreateDirectory(driverDest);
 
-            // Manifest
             string manifest = FindFile(sourceDir, "driver.vrdrivermanifest", "driver_manifest.json");
             if (manifest == null)
                 throw new FileNotFoundException(
-                    "Driver manifest not found. Make sure you extracted ALL files from the release zip " +
-                    "into the same folder as this installer.");
+                    "driver.vrdrivermanifest not found in the downloaded package. " +
+                    "Please open an issue on GitHub.");
             File.Copy(manifest, Path.Combine(driverDest, "driver.vrdrivermanifest"), overwrite: true);
-            log("    ✔  driver.vrdrivermanifest");
 
-            // Resources
             string resSrc = Path.Combine(sourceDir, "resources");
             if (Directory.Exists(resSrc))
-            {
                 CopyDirectory(resSrc, Path.Combine(driverDest, "resources"));
-                log("    ✔  resources/");
-            }
 
-            // DLL
             string binDest = Path.Combine(driverDest, "bin", "win64");
             Directory.CreateDirectory(binDest);
-            string dll = FindFile(sourceDir,
-                Path.Combine("bin", "win64", DriverDll), DriverDll);
+            string dll = FindFile(sourceDir, Path.Combine("bin", "win64", DriverDll), DriverDll);
             if (dll != null)
-            {
                 File.Copy(dll, Path.Combine(binDest, DriverDll), overwrite: true);
-                log("    ✔  " + DriverDll);
-            }
             else
-            {
-                log("    ⚠  " + DriverDll + " not found — manifest installed; add DLL manually later.");
-            }
-            log("    Driver files installed to: " + driverDest);
+                log("WARNING: " + DriverDll + " not found in package — driver may not load.");
 
-            // ── 2. Enable activateMultipleDrivers ─────────────────────────────
-            log("");
-            log("⚙   Enabling activateMultipleDrivers in steamvr.vrsettings…");
+            log("Driver files installed.");
+
+            log("Updating SteamVR settings…");
             EnableMultipleDrivers(log);
-
-            // ── 3. Firewall rules ─────────────────────────────────────────────
-            log("");
-            log("🔥  Adding Windows Firewall rules…");
-            AddFirewallRule("PhoneVR Discovery UDP In", "UDP", DiscoveryPort, log);
-            AddFirewallRule("PhoneVR Control TCP In",   "TCP", ControlPort,   log);
-            AddFirewallRule("PhoneVR Pose UDP In",      "UDP", PosePort,      log);
-
-            log("");
-            log("✅  Installation complete!");
         }
 
         // ── steamvr.vrsettings ────────────────────────────────────────────────
@@ -120,7 +153,7 @@ namespace PhoneVRInstaller
 
             if (!File.Exists(settingsPath))
             {
-                log("    ℹ  steamvr.vrsettings not found — will be configured on first SteamVR launch.");
+                log("steamvr.vrsettings not found — will apply on first SteamVR launch.");
                 return;
             }
 
@@ -129,76 +162,73 @@ namespace PhoneVRInstaller
 
             if (content.Contains("\"activateMultipleDrivers\""))
             {
-                // Key exists — make sure the value is true
-                updated = Regex.Replace(
-                    content,
+                updated = Regex.Replace(content,
                     @"""activateMultipleDrivers""\s*:\s*(true|false)",
                     "\"activateMultipleDrivers\" : true");
-                log("    ✔  activateMultipleDrivers set to true");
             }
             else if (content.Contains("\"steamvr\""))
             {
-                // steamvr section exists — inject key
-                updated = Regex.Replace(
-                    content,
+                updated = Regex.Replace(content,
                     @"""steamvr""\s*:\s*\{",
                     "\"steamvr\" : {\n      \"activateMultipleDrivers\" : true,");
-                log("    ✔  activateMultipleDrivers injected into [steamvr]");
             }
             else
             {
-                // No steamvr section — append one before the last closing brace
                 int last = content.LastIndexOf('}');
                 updated = last >= 0
                     ? content.Substring(0, last).TrimEnd().TrimEnd(',')
                         + ",\n   \"steamvr\" : {\n      \"activateMultipleDrivers\" : true\n   }\n}"
                     : content + "\n{ \"steamvr\" : { \"activateMultipleDrivers\" : true } }";
-                log("    ✔  steamvr section + activateMultipleDrivers added");
             }
 
             if (updated != content)
+            {
                 File.WriteAllText(settingsPath, updated, System.Text.Encoding.UTF8);
+                log("SteamVR multi-driver support enabled.");
+            }
         }
 
         // ── Firewall ──────────────────────────────────────────────────────────
 
         private static void AddFirewallRule(string name, string protocol, int port, Action<string> log)
         {
-            // Check if the rule already exists
             RunNetsh(string.Format("advfirewall firewall show rule name=\"{0}\" dir=in", name),
-                     out string output);
+                out string output);
+            if (output.Contains(name)) return; // already exists
 
-            if (output.Contains(name))
-            {
-                log(string.Format("    ℹ  Rule already exists: {0}", name));
-                return;
-            }
+            int exit = RunNetsh(string.Format(
+                "advfirewall firewall add rule name=\"{0}\" dir=in action=allow protocol={1} localport={2}",
+                name, protocol, port), out _);
 
-            int exit = RunNetsh(
-                string.Format(
-                    "advfirewall firewall add rule name=\"{0}\" dir=in action=allow protocol={1} localport={2}",
-                    name, protocol, port),
-                out _);
-
-            if (exit == 0)
-                log(string.Format("    ✔  Added rule: {0} ({1} port {2})", name, protocol, port));
-            else
-                log(string.Format("    ⚠  Could not add rule '{0}' (exit {1}). Add manually if needed.", name, exit));
+            if (exit != 0)
+                log(string.Format("Could not add firewall rule '{0}' — add manually if needed.", name));
         }
 
-        private static int RunNetsh(string args, out string output)
-        {
-            return RunCommand("netsh", args, out output);
-        }
+        private static int RunNetsh(string args, out string output) =>
+            RunCommand("netsh", args, out output);
 
         // ── Utilities ─────────────────────────────────────────────────────────
+
+        /// <summary>Finds the sub-directory that contains the actual driver files.</summary>
+        private static string FindDriverRoot(string extractDir)
+        {
+            var subdirs = Directory.GetDirectories(extractDir);
+            if (subdirs.Length == 1)
+            {
+                string sub = subdirs[0];
+                if (File.Exists(Path.Combine(sub, "driver.vrdrivermanifest")) ||
+                    File.Exists(Path.Combine(sub, "driver_manifest.json")))
+                    return sub;
+            }
+            return extractDir;
+        }
 
         private static int RunCommand(string exe, string args, out string output)
         {
             var psi = new ProcessStartInfo(exe, args)
             {
-                CreateNoWindow        = true,
-                UseShellExecute       = false,
+                CreateNoWindow         = true,
+                UseShellExecute        = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError  = true,
             };
@@ -210,7 +240,6 @@ namespace PhoneVRInstaller
             }
         }
 
-        /// <summary>Search <paramref name="baseDir"/> for the first existing candidate path.</summary>
         private static string FindFile(string baseDir, params string[] candidates)
         {
             foreach (string c in candidates)

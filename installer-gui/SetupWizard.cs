@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // PhoneVR-MotoG5 — installer-gui/SetupWizard.cs
 //
-// A four-step WinForms wizard that guides anyone — regardless of technical
-// skill — through installing the PhoneVR-MotoG5 SteamVR driver.
+// A three-step WinForms wizard.
 //
-// Step 1 — Welcome         : intro, requirements checklist
-// Step 2 — Ready to Install: shows detected SteamVR path + source dir
-// Step 3 — Installing      : animated progress + live install log
-// Step 4 — Done            : success / failure with next steps
+// Step 1 — Welcome   : prereqs checklist + auto-detected SteamVR path
+// Step 2 — Installing: progress bar + live status
+// Step 3 — Done      : success / failure with next steps
 
 using System;
 using System.Drawing;
@@ -48,16 +46,14 @@ namespace PhoneVRInstaller
 
         // ── Pages ──────────────────────────────────────────────────────────────
         private Panel      _pageWelcome;
-        private Panel      _pageReady;
         private Panel      _pageInstall;
         private Panel      _pageDone;
         private Panel[]    _pages;
         private int        _currentPage;
 
-        // ── Ready-page controls ───────────────────────────────────────────────
+        // ── Welcome-page controls ──────────────────────────────────────────
         private TextBox    _txtSteamVRPath;
-        private TextBox    _txtSourcePath;
-        private Label      _lblDetectStatus;
+        private Label      _lblSteamVRStatus;
 
         // ── Install-page controls ─────────────────────────────────────────────
         private ProgressBar  _progress;
@@ -217,13 +213,12 @@ namespace PhoneVRInstaller
 
             // Checklist items
             string[] checks = {
-                "✔  SteamVR installed and launched at least once",
+                "✔  SteamVR is installed and has been launched at least once",
                 "     ↳  Don't have it? Open Steam → Library → SteamVR → Install, then launch it once.",
                 "✔  Your PC and phone are on the same Wi-Fi network (5 GHz recommended)",
                 "✔  The PhoneVR-MotoG5 APK installed on your Android phone",
-                "✔  This installer is in the same folder as the driver files (from the release zip)",
             };
-            var checkPanel = new Panel { Location = new Point(0, 98), Size = new Size(510, 120) };
+            var checkPanel = new Panel { Location = new Point(0, 98), Size = new Size(510, 96) };
             for (int i = 0; i < checks.Length; i++)
             {
                 bool isSubNote = checks[i].StartsWith("     ↳");
@@ -238,76 +233,44 @@ namespace PhoneVRInstaller
                 checkPanel.Controls.Add(lbl);
             }
 
-            // "What will happen" note
+            // SteamVR path row (auto-detected; user can correct via Browse)
+            var lblSteamVRLbl = new Label
+            {
+                Text      = "SteamVR path (auto-detected):",
+                Location  = new Point(0, 202),
+                AutoSize  = true,
+                Font      = FontBold9,
+                ForeColor = TextDark,
+            };
+            _txtSteamVRPath = new TextBox { Location = new Point(0, 222), Width = 400 };
+            StyleTextBox(_txtSteamVRPath);
+            var btnBrowseSteam = MakeButton("Change…", 88, false);
+            btnBrowseSteam.Location = new Point(406, 221);
+            btnBrowseSteam.Click += (s, e) => BrowseFolder(_txtSteamVRPath, "Select SteamVR folder");
+
+            _lblSteamVRStatus = new Label
+            {
+                Location  = new Point(0, 252),
+                Size      = new Size(510, 18),
+                Font      = FontSubtitle,
+                AutoSize  = false,
+            };
+
+            // "What happens" note
             var lblWillDo = MakeBodyLabel(
-                "The installer will automatically:\n" +
-                "  • Copy the driver files to your SteamVR drivers folder\n" +
-                "  • Enable multi-driver support in SteamVR settings\n" +
-                "  • Add Windows Firewall rules so your phone can connect",
-                new Rectangle(0, 226, 510, 68));
+                "The installer downloads the driver from GitHub and sets everything up automatically.",
+                new Rectangle(0, 276, 510, 36));
             lblWillDo.ForeColor = TextMid;
 
             welcomeBox.Controls.Add(lblIntro);
             welcomeBox.Controls.Add(lblCheckHeading);
             welcomeBox.Controls.Add(checkPanel);
+            welcomeBox.Controls.Add(lblSteamVRLbl);
+            welcomeBox.Controls.Add(_txtSteamVRPath);
+            welcomeBox.Controls.Add(btnBrowseSteam);
+            welcomeBox.Controls.Add(_lblSteamVRStatus);
             welcomeBox.Controls.Add(lblWillDo);
             _pageWelcome.Controls.Add(welcomeBox);
-
-            // ── Page: Ready ────────────────────────────────────────────────────
-            _pageReady = new Panel { Dock = DockStyle.Fill, BackColor = LightBg };
-
-            var readyBox = new Panel { BackColor = WhiteBg, Dock = DockStyle.Fill, Padding = new Padding(20) };
-
-            var lblSteamVRLbl = new Label { Text = "SteamVR installation path:", Location = new Point(0, 4), AutoSize = true, Font = FontBold9, ForeColor = TextDark };
-            _txtSteamVRPath = new TextBox { Location = new Point(0, 26), Width = 430, BackColor = Color.FromArgb(250, 252, 255) };
-            StyleTextBox(_txtSteamVRPath);
-            var btnBrowseSteam = MakeButton("Browse…", 80, false);
-            btnBrowseSteam.Location = new Point(438, 25);
-            btnBrowseSteam.Click += (s, e) => BrowseFolder(_txtSteamVRPath, "Select SteamVR folder");
-
-            var lblSourceLbl = new Label { Text = "Driver files folder (where you extracted the zip):", Location = new Point(0, 62), AutoSize = true, Font = FontBold9, ForeColor = TextDark };
-            _txtSourcePath = new TextBox { Location = new Point(0, 84), Width = 430 };
-            StyleTextBox(_txtSourcePath);
-            var btnBrowseSrc = MakeButton("Browse…", 80, false);
-            btnBrowseSrc.Location = new Point(438, 83);
-            btnBrowseSrc.Click += (s, e) => BrowseFolder(_txtSourcePath, "Select driver files folder");
-
-            _lblDetectStatus = new Label
-            {
-                Location  = new Point(0, 122),
-                Size      = new Size(518, 40),
-                Font      = FontBody,
-                ForeColor = GreenOk,
-                AutoSize  = false,
-            };
-
-            var tipBox = new Panel
-            {
-                Location  = new Point(0, 172),
-                Size      = new Size(518, 66),
-                BackColor = Color.FromArgb(235, 245, 255),
-                Padding   = new Padding(12, 8, 12, 8),
-            };
-            var tipLabel = new Label
-            {
-                Dock      = DockStyle.Fill,
-                Text      = "💡  Tip: If SteamVR was not detected automatically, open Steam, go to\n" +
-                            "    Library → SteamVR, install it, run it once, then click ← Back and retry.",
-                Font      = FontBody,
-                ForeColor = Color.FromArgb(30, 80, 150),
-                AutoSize  = false,
-            };
-            tipBox.Controls.Add(tipLabel);
-
-            readyBox.Controls.Add(lblSteamVRLbl);
-            readyBox.Controls.Add(_txtSteamVRPath);
-            readyBox.Controls.Add(btnBrowseSteam);
-            readyBox.Controls.Add(lblSourceLbl);
-            readyBox.Controls.Add(_txtSourcePath);
-            readyBox.Controls.Add(btnBrowseSrc);
-            readyBox.Controls.Add(_lblDetectStatus);
-            readyBox.Controls.Add(tipBox);
-            _pageReady.Controls.Add(readyBox);
 
             // ── Page: Install ──────────────────────────────────────────────────
             _pageInstall = new Panel { Dock = DockStyle.Fill, BackColor = LightBg };
@@ -396,7 +359,7 @@ namespace PhoneVRInstaller
             _pageDone.Controls.Add(doneBox);
 
             // ── Assemble ───────────────────────────────────────────────────────
-            _pages = new[] { _pageWelcome, _pageReady, _pageInstall, _pageDone };
+            _pages = new[] { _pageWelcome, _pageInstall, _pageDone };
             foreach (var pg in _pages)
                 _content.Controls.Add(pg);
 
@@ -425,41 +388,31 @@ namespace PhoneVRInstaller
                 case 0: // Welcome
                     SetHeader("Welcome to PhoneVR-MotoG5 Setup",
                                "Version 1.0 — Turn your Android phone into a SteamVR headset");
-                    _btnBack.Enabled  = false;
-                    _btnNext.Text     = "Next  →";
-                    _btnNext.Enabled  = true;
-                    _btnCancel.Text   = "Cancel";
+                    _btnBack.Enabled   = false;
+                    _btnNext.Text      = "Install  →";
+                    _btnNext.Enabled   = true;
+                    _btnCancel.Text    = "Cancel";
                     _btnCancel.Enabled = true;
+                    DetectSteamVR();
                     break;
 
-                case 1: // Ready to Install
-                    SetHeader("Ready to Install",
-                               "Review the paths below, then click Install.");
-                    _btnBack.Enabled  = true;
-                    _btnNext.Text     = "Install";
-                    _btnNext.Enabled  = true;
-                    _btnCancel.Text   = "Cancel";
-                    _btnCancel.Enabled = true;
-                    PopulateReadyPage();
-                    break;
-
-                case 2: // Installing
+                case 1: // Installing
                     SetHeader("Installing…",
-                               "Do not close this window.");
-                    _btnBack.Enabled  = false;
-                    _btnNext.Enabled  = false;
+                               "This takes about 30 seconds — please wait.");
+                    _btnBack.Enabled   = false;
+                    _btnNext.Enabled   = false;
                     _btnCancel.Enabled = false;
                     RunInstall();
                     break;
 
-                case 3: // Done
+                case 2: // Done
                     SetHeader(
                         _installSuccess ? "Installation Complete!" : "Installation Failed",
                         _installSuccess ? "Your PC is ready. Now set up the phone app."
                                         : "Something went wrong — see details below.");
-                    _btnBack.Enabled  = false;
-                    _btnNext.Enabled  = false;
-                    _btnCancel.Text   = "Close";
+                    _btnBack.Enabled   = false;
+                    _btnNext.Enabled   = false;
+                    _btnCancel.Text    = "Close";
                     _btnCancel.Enabled = true;
                     PopulateDonePage();
                     break;
@@ -472,36 +425,29 @@ namespace PhoneVRInstaller
             _lblSubtitle.Text = subtitle;
         }
 
-        // ── Ready page ─────────────────────────────────────────────────────────
+        // ── Welcome page: auto-detect SteamVR ────────────────────────────────
 
-        private void PopulateReadyPage()
+        private void DetectSteamVR()
         {
-            string sourceDir = AppDomain.CurrentDomain.BaseDirectory;
-            _txtSourcePath.Text = sourceDir;
-
             string steam = InstallerCore.FindSteamPath();
             if (steam != null)
             {
                 string svr = InstallerCore.FindSteamVRPath(steam);
                 if (svr != null)
                 {
-                    _txtSteamVRPath.Text     = svr;
-                    _lblDetectStatus.Text     = "✔  SteamVR detected automatically — you're good to go!";
-                    _lblDetectStatus.ForeColor = GreenOk;
+                    _txtSteamVRPath.Text       = svr;
+                    _lblSteamVRStatus.Text      = "✔  SteamVR detected automatically.";
+                    _lblSteamVRStatus.ForeColor = GreenOk;
+                    return;
                 }
-                else
-                {
-                    _txtSteamVRPath.Text      = Path.Combine(steam, @"steamapps\common\SteamVR");
-                    _lblDetectStatus.Text      = "⚠  SteamVR folder not found. Install SteamVR via Steam and run it once, then adjust the path above.";
-                    _lblDetectStatus.ForeColor = Color.FromArgb(180, 100, 0);
-                }
+                _txtSteamVRPath.Text = Path.Combine(steam, @"steamapps\common\SteamVR");
             }
             else
             {
-                _txtSteamVRPath.Text      = @"C:\Program Files (x86)\Steam\steamapps\common\SteamVR";
-                _lblDetectStatus.Text      = "⚠  Steam not found in registry. Please enter the SteamVR path manually.";
-                _lblDetectStatus.ForeColor = Color.FromArgb(180, 100, 0);
+                _txtSteamVRPath.Text = @"C:\Program Files (x86)\Steam\steamapps\common\SteamVR";
             }
+            _lblSteamVRStatus.Text      = "⚠  Could not detect SteamVR — please verify the path above.";
+            _lblSteamVRStatus.ForeColor = Color.FromArgb(180, 100, 0);
         }
 
         // ── Install ────────────────────────────────────────────────────────────
@@ -509,17 +455,25 @@ namespace PhoneVRInstaller
         private void RunInstall()
         {
             string steamVRPath = _txtSteamVRPath.Text.Trim();
-            string sourceDir   = _txtSourcePath.Text.Trim();
 
             AppendLog("PhoneVR-MotoG5 Installer  —  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-            AppendLog(new string('─', 56));
             AppendLog("");
 
             var thread = new Thread(() =>
             {
                 try
                 {
-                    InstallerCore.Install(sourceDir, steamVRPath, msg => Invoke(new Action(() => AppendLog(msg))));
+                    InstallerCore.DownloadAndInstall(
+                        steamVRPath,
+                        msg   => Invoke(new Action(() => AppendLog(msg))),
+                        pct   => Invoke(new Action(() =>
+                        {
+                            if (pct >= 0 && pct <= 100)
+                            {
+                                _progress.Style = ProgressBarStyle.Continuous;
+                                _progress.Value = pct;
+                            }
+                        })));
                     _installSuccess = true;
                 }
                 catch (Exception ex)
@@ -532,12 +486,7 @@ namespace PhoneVRInstaller
                         _lblStatus.ForeColor = Color.FromArgb(196, 48, 48);
                     }));
                 }
-                Invoke(new Action(() =>
-                {
-                    _progress.Style = ProgressBarStyle.Continuous;
-                    _progress.Value = _installSuccess ? 100 : 0;
-                    ShowPage(3);
-                }));
+                Invoke(new Action(() => ShowPage(2)));
             });
             thread.IsBackground = true;
             thread.Start();
@@ -579,13 +528,12 @@ namespace PhoneVRInstaller
                 _lblDoneHeading.ForeColor = RedFail;
                 _lblDoneBody.Text =
                     "Common reasons and fixes:\n\n" +
-                    "  •  Did you run the installer as Administrator?\n" +
+                    "  •  Run the installer as Administrator:\n" +
                     "     Right-click PhoneVRInstaller.exe → \"Run as administrator\"\n\n" +
+                    "  •  Check your internet connection and try again.\n\n" +
                     "  •  Is the SteamVR path correct?\n" +
                     "     Default: C:\\Program Files (x86)\\Steam\\steamapps\\common\\SteamVR\n\n" +
-                    "  •  Are all driver files in the same folder as this installer?\n" +
-                    "     You need: driver.vrdrivermanifest  bin\\win64\\driver_phonevr_motog5.dll\n\n" +
-                    "See the log on the previous screen, or open an issue on GitHub for help.";
+                    "See the log above, or open an issue on GitHub for help.";
             }
         }
 
@@ -595,14 +543,14 @@ namespace PhoneVRInstaller
 
         private void BtnNext_Click()
         {
-            if (_currentPage == 1)
+            if (_currentPage == 0)
             {
                 if (!Directory.Exists(_txtSteamVRPath.Text.Trim()))
                 {
                     MessageBox.Show(
-                        "The SteamVR path you entered does not exist on disk.\n\n" +
+                        "The SteamVR path shown does not exist on disk.\n\n" +
                         "Please install SteamVR via Steam (Library → SteamVR), run it once,\n" +
-                        "then enter the correct path or click Browse…",
+                        "then click Change… or type the correct path.",
                         "SteamVR Not Found",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Warning);
@@ -619,7 +567,7 @@ namespace PhoneVRInstaller
 
         private void BtnCancel_Click()
         {
-            if (_currentPage == 2) return; // no cancel while installing
+            if (_currentPage == 1) return; // no cancel while installing
             Close();
         }
 
