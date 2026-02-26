@@ -13,11 +13,8 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
     }
-    versionCatalogs {
-        create("libs") {
-            from(files("gradle/libs.versions.toml"))
-        }
-    }
+    // gradle/libs.versions.toml is picked up automatically by Gradle 8+.
+    // No explicit versionCatalogs { from(...) } needed here.
 }
 
 rootProject.name = "PhoneVR-MotoG5"
