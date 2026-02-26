@@ -1,0 +1,16 @@
+{
+  "driver_phonevr_motog5": {
+    "renderWidth": 960,
+    "renderHeight": 540,
+    "displayFrequency": 60.0,
+    "ipd": 0.063,
+    "fovHorizontal": 90.0,
+    "fovVertical": 90.0,
+    "encoderBitrate": 3000000,
+    "encoderPreset": "ultrafast",
+    "discoveryPort": 33333,
+    "controlPort": 33334,
+    "posePort": 33335,
+    "poseAlpha": 0.85
+  }
+}

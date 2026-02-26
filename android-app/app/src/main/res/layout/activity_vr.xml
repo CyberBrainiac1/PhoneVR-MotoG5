@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-License-Identifier: GPL-3.0-only
+  PhoneVR-MotoG5 — activity_vr.xml — VR rendering screen (landscape, full-screen)
+-->
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF000000">
+
+    <!-- OpenGL ES 2.0 surface — fills the entire display -->
+    <android.opengl.GLSurfaceView
+        android:id="@+id/gl_surface_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
+
+    <!-- HUD overlay — stats and recenter button -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:layout_gravity="bottom">
+
+        <!-- Stats overlay (tap to toggle) -->
+        <TextView
+            android:id="@+id/tv_stats"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#AAFFFFFF"
+            android:textSize="10sp"
+            android:visibility="gone"/>
+
+        <!-- Recenter button — shown in corner for accessibility -->
+        <Button
+            android:id="@+id/btn_recenter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_recenter"
+            android:alpha="0.6"
+            android:textSize="12sp"/>
+    </LinearLayout>
+
+</FrameLayout>

@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# PhoneVR-MotoG5 — .github/workflows/build-installer.yml
+# Builds the .NET Framework 4.7.2 WinForms installer wizard on every push and PR.
+name: Build PC Installer (.exe)
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - 'installer-gui/**'
+      - '.github/workflows/build-installer.yml'
+  pull_request:
+    paths:
+      - 'installer-gui/**'
+      - '.github/workflows/build-installer.yml'
+
+jobs:
+  build:
+    name: Build PhoneVRInstaller.exe
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          # .NET 8 SDK can target net472 via SDK-style projects
+          dotnet-version: '8.0'
+
+      - name: Restore & Build installer
+        working-directory: installer-gui
+        run: dotnet build -c Release -o out
+        shell: pwsh
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhoneVRInstaller
+          path: installer-gui/out/PhoneVRInstaller.exe
+          if-no-files-found: error
+          retention-days: 30
