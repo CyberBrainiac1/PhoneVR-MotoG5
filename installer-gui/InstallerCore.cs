@@ -27,6 +27,18 @@ namespace PhoneVRInstaller
         internal const string DriverZipUrl =
             "https://github.com/CyberBrainiac1/PhoneVR-MotoG5/releases/latest/download/phonevr-motog5-driver.zip";
 
+        internal const string ApkUrl =
+            "https://github.com/CyberBrainiac1/PhoneVR-MotoG5/releases/latest/download/phonevr-motog5.apk";
+
+        // Platform-tools (contains adb.exe) — used if ADB is not already installed
+        private const string PlatformToolsUrl =
+            "https://dl.google.com/android/repository/platform-tools-latest-windows.zip";
+
+        // ── Phone-install result ──────────────────────────────────────────────
+
+        internal enum PhoneInstallResult { NotAttempted, NoDevice, Success, Failed }
+        internal static string PhoneInstallError { get; private set; }
+
         // ── Registry discovery ────────────────────────────────────────────────
 
         internal static string FindSteamPath()
@@ -266,6 +278,161 @@ namespace PhoneVRInstaller
                 if (key == null) return null;
                 var val = key.GetValue("InstallPath") as string;
                 return (!string.IsNullOrEmpty(val) && Directory.Exists(val)) ? val : null;
+            }
+        }
+
+        // ── Phone / APK install ───────────────────────────────────────────────
+
+        /// <summary>
+        /// Checks whether an Android phone is connected via USB,
+        /// and if so, downloads and installs the APK automatically.
+        /// </summary>
+        internal static PhoneInstallResult TryInstallApkToPhone(
+            Action<string> log,
+            Action<int>    progress)
+        {
+            PhoneInstallError = null;
+
+            // ── 1. Locate or obtain adb.exe ───────────────────────────────────
+            log("Checking for connected Android phone…");
+            string adb = FindAdb(log);
+            if (adb == null)
+            {
+                log("ADB not found and could not be downloaded — skipping phone install.");
+                return PhoneInstallResult.NoDevice;
+            }
+
+            // ── 2. Detect connected devices ───────────────────────────────────
+            RunCommand(adb, "start-server", out _);
+            RunCommand(adb, "devices", out string devOut);
+
+            bool hasDevice = false;
+            foreach (string line in devOut.Split('\n'))
+            {
+                string t = line.Trim();
+                if (t.Length > 0 && !t.StartsWith("List of") && t.EndsWith("device"))
+                {
+                    hasDevice = true;
+                    break;
+                }
+            }
+
+            if (!hasDevice)
+            {
+                log("No Android device detected — you can install the app manually.");
+                return PhoneInstallResult.NoDevice;
+            }
+
+            log("Android phone detected!");
+
+            // ── 3. Download APK ───────────────────────────────────────────────
+            string tempDir = Path.Combine(
+                Path.GetTempPath(), "PhoneVR_APK_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            Directory.CreateDirectory(tempDir);
+
+            try
+            {
+                string apkPath = Path.Combine(tempDir, "phonevr-motog5.apk");
+                log("Downloading PhoneVR app…");
+                using (var wc = new WebClient())
+                {
+                    wc.Headers["User-Agent"] = "PhoneVR-MotoG5-Installer/1.0";
+                    wc.DownloadProgressChanged += (s, e) =>
+                        progress(Math.Min(99, e.ProgressPercentage));
+                    wc.DownloadFile(ApkUrl, apkPath);
+                }
+                log("APK downloaded.");
+
+                // ── 4. ADB install ────────────────────────────────────────────
+                log("Installing app on phone (accept any prompt on your phone)…");
+                int exit = RunCommand(adb, "install -r \"" + apkPath + "\"", out string installOut);
+
+                if (exit == 0 && installOut.Contains("Success"))
+                {
+                    log("App installed on phone successfully!");
+                    return PhoneInstallResult.Success;
+                }
+
+                string reason = installOut.Trim();
+                log("APK install returned: " + reason);
+                PhoneInstallError = reason;
+                return PhoneInstallResult.Failed;
+            }
+            catch (Exception ex)
+            {
+                log("Phone install error: " + ex.Message);
+                PhoneInstallError = ex.Message;
+                return PhoneInstallResult.Failed;
+            }
+            finally
+            {
+                try { Directory.Delete(tempDir, recursive: true); } catch { /* best-effort */ }
+            }
+        }
+
+        /// <summary>
+        /// Finds adb.exe on this machine, or downloads Android platform-tools
+        /// to a local cache folder and returns the path.
+        /// Returns null if ADB could not be found or downloaded.
+        /// </summary>
+        private static string FindAdb(Action<string> log)
+        {
+            // Check PATH
+            RunCommand("where", "/q adb", out string whereOut);
+            string pathHit = whereOut.Trim();
+            if (File.Exists(pathHit)) return pathHit;
+
+            // Check common Android SDK locations
+            string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string[] candidates =
+            {
+                Path.Combine(local, @"Android\Sdk\platform-tools\adb.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                             @"AppData\Local\Android\Sdk\platform-tools\adb.exe"),
+                @"C:\Android\platform-tools\adb.exe",
+                @"C:\Program Files\Android\platform-tools\adb.exe",
+            };
+            foreach (string c in candidates)
+                if (File.Exists(c)) return c;
+
+            // Not found — download Google platform-tools (~12 MB) into %LOCALAPPDATA%\PhoneVR
+            string cacheDir  = Path.Combine(local, "PhoneVR", "platform-tools");
+            string cachedAdb = Path.Combine(cacheDir, "adb.exe");
+            if (File.Exists(cachedAdb)) return cachedAdb;
+
+            try
+            {
+                log("Downloading Android platform-tools (~12 MB)…");
+                string zipDir  = Path.Combine(Path.GetTempPath(), "pvr_pt_" + Guid.NewGuid().ToString("N").Substring(0, 6));
+                string zipPath = Path.Combine(zipDir, "platform-tools.zip");
+                Directory.CreateDirectory(zipDir);
+
+                using (var wc = new WebClient())
+                {
+                    wc.Headers["User-Agent"] = "PhoneVR-MotoG5-Installer/1.0";
+                    wc.DownloadFile(PlatformToolsUrl, zipPath);
+                }
+
+                log("Extracting platform-tools…");
+                string extractDir = Path.Combine(zipDir, "extracted");
+                ZipFile.ExtractToDirectory(zipPath, extractDir);
+
+                // The zip contains a "platform-tools/" subfolder
+                string inner = Path.Combine(extractDir, "platform-tools");
+                string src   = Directory.Exists(inner) ? inner : extractDir;
+
+                if (Directory.Exists(cacheDir)) Directory.Delete(cacheDir, true);
+                Directory.CreateDirectory(Path.GetDirectoryName(cacheDir));
+                Directory.Move(src, cacheDir);
+
+                try { Directory.Delete(zipDir, true); } catch { /* best-effort */ }
+
+                return File.Exists(cachedAdb) ? cachedAdb : null;
+            }
+            catch (Exception ex)
+            {
+                log("Could not download platform-tools: " + ex.Message);
+                return null;
             }
         }
     }

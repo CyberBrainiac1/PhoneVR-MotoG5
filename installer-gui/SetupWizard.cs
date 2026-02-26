@@ -68,6 +68,12 @@ namespace PhoneVRInstaller
         // ── State ──────────────────────────────────────────────────────────────
         private bool   _installSuccess;
         private string _lastError;
+        private InstallerCore.PhoneInstallResult _phoneResult =
+            InstallerCore.PhoneInstallResult.NotAttempted;
+
+        // ── Done-page dynamic phone labels ─────────────────────────────────────
+        private Label _lblPhoneHeading;
+        private Label _lblPhoneSteps;
 
         public SetupWizard()
         {
@@ -355,7 +361,7 @@ namespace PhoneVRInstaller
             };
 
             // Phone app section (success only)
-            var lblPhoneHeading = new Label
+            _lblPhoneHeading = new Label
             {
                 Location  = new Point(0, 208),
                 Size      = new Size(518, 20),
@@ -375,7 +381,7 @@ namespace PhoneVRInstaller
                 System.Diagnostics.Process.Start(
                     "https://github.com/CyberBrainiac1/PhoneVR-MotoG5/releases/latest");
 
-            var lblPhoneSteps = new Label
+            _lblPhoneSteps = new Label
             {
                 Location  = new Point(0, 254),
                 Size      = new Size(518, 80),
@@ -391,9 +397,9 @@ namespace PhoneVRInstaller
             doneBox.Controls.Add(_lblDoneIcon);
             doneBox.Controls.Add(_lblDoneHeading);
             doneBox.Controls.Add(_lblDoneBody);
-            doneBox.Controls.Add(lblPhoneHeading);
+            doneBox.Controls.Add(_lblPhoneHeading);
             doneBox.Controls.Add(_linkGetApp);
-            doneBox.Controls.Add(lblPhoneSteps);
+            doneBox.Controls.Add(_lblPhoneSteps);
             _pageDone.Controls.Add(doneBox);
 
             // ── Assemble ───────────────────────────────────────────────────────
@@ -446,8 +452,11 @@ namespace PhoneVRInstaller
                 case 2: // Done
                     SetHeader(
                         _installSuccess ? "Installation Complete!" : "Installation Failed",
-                        _installSuccess ? "Your PC is ready. Now set up the phone app."
-                                        : "Something went wrong — see the error below.");
+                        _installSuccess
+                            ? (_phoneResult == InstallerCore.PhoneInstallResult.Success
+                                ? "Your PC driver and phone app are both installed."
+                                : "Your PC is ready. Now set up the phone app.")
+                            : "Something went wrong — see the error below.");
                     _btnBack.Enabled   = false;
                     _btnNext.Enabled   = false;
                     _btnCancel.Text    = _installSuccess ? "Close" : "Try Again";
@@ -513,6 +522,20 @@ namespace PhoneVRInstaller
                             }
                         })));
                     _installSuccess = true;
+
+                    // ── Try to auto-install APK on any connected Android phone ──
+                    Invoke(new Action(() =>
+                    {
+                        _progress.Style = ProgressBarStyle.Marquee;
+                        AppendLog("");
+                    }));
+                    _phoneResult = InstallerCore.TryInstallApkToPhone(
+                        msg => Invoke(new Action(() => AppendLog(msg))),
+                        pct => Invoke(new Action(() =>
+                        {
+                            _progress.Style = ProgressBarStyle.Continuous;
+                            _progress.Value = Math.Min(100, pct);
+                        })));
                 }
                 catch (Exception ex)
                 {
@@ -544,25 +567,64 @@ namespace PhoneVRInstaller
 
         private void PopulateDonePage()
         {
-            // Show phone-app section only on success
-            foreach (Control c in _pageDone.Controls[0].Controls)
-            {
-                if (c != _lblDoneIcon && c != _lblDoneHeading && c != _lblDoneBody)
-                    c.Visible = _installSuccess;
-            }
+            // Phone section visible only on driver-install success
+            bool phoneVisible = _installSuccess;
+            _lblPhoneHeading.Visible = phoneVisible;
+            _linkGetApp.Visible      = phoneVisible;
+            _lblPhoneSteps.Visible   = phoneVisible;
 
             if (_installSuccess)
             {
                 _lblDoneIcon.Text         = "✔";
                 _lblDoneIcon.ForeColor    = GreenOk;
-                _lblDoneHeading.Text      = "Driver installed! Now set up your phone.";
-                _lblDoneHeading.ForeColor = GreenOk;
-                _lblDoneBody.Text =
-                    "PC driver is ready. Here's what to do next:\n\n" +
-                    "  •  Restart SteamVR (close and reopen it via Steam)\n" +
-                    "  •  Download the APK below and install it on your Motorola / Android phone\n" +
-                    "  •  Open the app on your phone → tap  Find PC  (auto-discovers on Wi-Fi)\n" +
-                    "  •  Slot the phone into a Google Cardboard viewer — you're in VR!";
+
+                switch (_phoneResult)
+                {
+                    case InstallerCore.PhoneInstallResult.Success:
+                        _lblDoneHeading.Text      = "All done — PC driver and phone app installed!";
+                        _lblDoneHeading.ForeColor = GreenOk;
+                        _lblDoneBody.Text =
+                            "Everything is set up. Last step:\n\n" +
+                            "  •  Restart SteamVR (close and reopen it via Steam)\n" +
+                            "  •  Open PhoneVR-MotoG5 on your phone → tap  Find PC\n" +
+                            "  •  Slot phone into a Google Cardboard viewer — enjoy VR!";
+                        // No need to show download section
+                        _lblPhoneHeading.Visible = false;
+                        _linkGetApp.Visible      = false;
+                        _lblPhoneSteps.Visible   = false;
+                        break;
+
+                    case InstallerCore.PhoneInstallResult.Failed:
+                        _lblDoneHeading.Text      = "Driver installed. Phone app needs manual install.";
+                        _lblDoneHeading.ForeColor = GreenOk;
+                        _lblDoneBody.Text =
+                            "PC driver is ready, but auto-installing the app on your phone failed:\n" +
+                            (InstallerCore.PhoneInstallError != null
+                                ? "  Error: " + InstallerCore.PhoneInstallError + "\n\n"
+                                : "\n") +
+                            "You can install it manually using the link below.";
+                        _lblPhoneHeading.Text = "Install the app on your Android phone manually:";
+                        _lblPhoneSteps.Text   =
+                            "  1.  Open the link below on your phone and download the APK\n" +
+                            "  2.  Tap the APK to install (allow \"Install unknown apps\" if prompted)\n" +
+                            "  3.  Open PhoneVR-MotoG5 → tap Find PC → put on headset";
+                        break;
+
+                    default: // NoDevice or NotAttempted
+                        _lblDoneHeading.Text      = "Driver installed! Now set up your phone.";
+                        _lblDoneHeading.ForeColor = GreenOk;
+                        _lblDoneBody.Text =
+                            "PC driver is ready. Here's what to do next:\n\n" +
+                            "  •  Restart SteamVR (close and reopen it via Steam)\n" +
+                            "  •  Download and install the app on your Motorola / Android\n" +
+                            "     (connect the phone via USB next time to auto-install!)";
+                        _lblPhoneHeading.Text = "Get the app on your Android phone:";
+                        _lblPhoneSteps.Text   =
+                            "  1.  Open the link below on your phone and download the APK\n" +
+                            "  2.  Tap the APK to install (allow \"Install unknown apps\" if prompted)\n" +
+                            "  3.  Open PhoneVR-MotoG5 → tap Find PC → slot into headset";
+                        break;
+                }
             }
             else
             {
@@ -620,6 +682,7 @@ namespace PhoneVRInstaller
                 // "Try Again" — reset state and go back to Welcome
                 _installSuccess = false;
                 _lastError      = null;
+                _phoneResult    = InstallerCore.PhoneInstallResult.NotAttempted;
                 _txtLog.Clear();
                 _progress.Value = 0;
                 _progress.Style = ProgressBarStyle.Marquee;
